@@ -1,6 +1,7 @@
 package structure
 
 import (
+	"net/url"
 	"time"
 
 	"github.com/projectdiscovery/cryptoutil"
@@ -64,6 +65,7 @@ type WrapperOptions struct {
 	ChromeThreads  int
 	Proxy          string
 }
+
 type Response struct {
 	StatusCode    int
 	Headers       map[string][]string
@@ -77,6 +79,8 @@ type Response struct {
 	HTTP2         bool
 	Pipeline      bool
 	Duration      time.Duration
+	URL           *url.URL   // Ajouter ce champ
+	RedirectChain []*url.URL // Ajouter ce champ
 }
 
 type PortOpenByIp struct {

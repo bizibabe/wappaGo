@@ -5,12 +5,14 @@ import (
 	"crypto/tls"
 	"crypto/x509"
 	"encoding/base64"
+	"errors"
 	"fmt"
 	"io"
 	"io/ioutil"
 	"log"
 	"net"
 	"net/http"
+	"net/url"
 	URL "net/url"
 	"os"
 	"strconv"
@@ -144,10 +146,14 @@ func (c *Cmd) startPortScan(url string, ip string, results chan structure.Data) 
 		log.Fatal(err)
 	}
 	//fmt.Println(isCDN)
-	if isCDN {
+	// Vérifier si l'option -ports est spécifiée
+	if *c.Options.Ports != "" {
+		portTemp = strings.Split(*c.Options.Ports, ",")
+	} else if isCDN {
 		portTemp = []string{"80", "443"}
 		CdnName = cdnName
 	}
+
 	var portOpen []string
 	alreadyScanned := lib.CheckIpAlreadyScan(ip, c.PortOpenByIP)
 	if alreadyScanned.IP != "" {
@@ -187,7 +193,6 @@ func (c *Cmd) startPortScan(url string, ip string, results chan structure.Data) 
 
 func (c *Cmd) getWrapper(urlData string, port string, data structure.Data, results chan structure.Data) {
 	errorContinue := true
-	//u, err := url.Parse(urlData)
 	var urlDataPort string
 	var resp *structure.Response
 	if port != "80" && port != "443" {
@@ -195,51 +200,229 @@ func (c *Cmd) getWrapper(urlData string, port string, data structure.Data, resul
 	} else {
 		urlDataPort = urlData
 	}
-	http.DefaultTransport.(*http.Transport).TLSClientConfig = &tls.Config{InsecureSkipVerify: true}
-	if *c.Options.Proxy != "" {
-		proxyURL, parseErr := URL.Parse(*c.Options.Proxy)
-		if parseErr == nil {
-			http.DefaultTransport.(*http.Transport).Proxy = http.ProxyURL(proxyURL)
-			http.DefaultTransport.(*http.Transport).TLSClientConfig = &tls.Config{InsecureSkipVerify: true, MinVersion: tls.VersionTLS12, MaxVersion: tls.VersionTLS12}
+
+	// Construire l'URL initiale complète
+	initialURL := "http://" + urlDataPort
+	if port == "443" {
+		initialURL = "https://" + urlDataPort
+	}
+
+	initialParsedURL, err := url.Parse(initialURL)
+	if err != nil {
+		errorResponse := map[string]string{
+			"error":   "Target changed",
+			"message": fmt.Sprintf("Error parsing initial URL %s: %v", initialURL, err),
+		}
+
+		jsonResponse, err := json.Marshal(errorResponse)
+		if err != nil {
+			log.Fatalf("Error marshalling JSON: %v", err)
+		}
+
+		// Print the JSON response
+		fmt.Println(string(jsonResponse))
+		return
+	}
+	initialDomain := initialParsedURL.Hostname()
+	initialPort := initialParsedURL.Port()
+	if initialPort == "" {
+		// Si le port n'est pas spécifié, utiliser le port par défaut en fonction du schéma
+		if initialParsedURL.Scheme == "https" {
+			initialPort = "443"
+		} else {
+			initialPort = "80"
 		}
 	}
-	client := c.getClientCtx()
 
-	var TempResp structure.Response
-	//resp, errSSL = client.Get("https://" + urlDataPort)
-	var errSSL error
-	if port != "80" {
-		request, _ := http.NewRequest("GET", "https://"+urlDataPort, nil)
-		resp, errSSL = Do(request, client)
-	}
-	if errSSL != nil || port == "80" {
-		if port == "443" {
-			errorContinue = false
-		} else {
-			request, _ := http.NewRequest("GET", "http://"+urlDataPort, nil)
-			resp, errPlain := Do(request, client)
-			if errPlain != nil || resp == nil {
+	if *c.Options.FollowRedirect {
+		// Utiliser chromedp pour suivre les redirections JavaScript
+		ctx, cancel := chromedp.NewContext(c.ChromeCtx)
+		defer cancel()
 
-				errorContinue = false
-			} else {
-				data, TempResp, _ = c.DefineBasicMetric(data, resp)
-				if data.Infos.Scheme == "" {
-					data.Infos.Scheme = "http"
+		var finalURL string
+		var statusCode int64
+		var redirectChain []string
+
+		// Écouter les événements réseau pour capturer la chaîne de redirection et le code de statut
+		chromedp.ListenTarget(ctx, func(ev interface{}) {
+			switch ev := ev.(type) {
+			case *network.EventRequestWillBeSent:
+				if ev.Type == network.ResourceTypeDocument {
+					redirectChain = append(redirectChain, ev.Request.URL)
 				}
-				urlData = "http://" + urlDataPort
-				data.Url = urlData
+			case *network.EventResponseReceived:
+				if ev.Type == network.ResourceTypeDocument {
+					statusCode = int64(ev.Response.Status)
+				}
+			}
+		})
+
+		// Exécuter les actions chromedp pour naviguer et capturer l'URL finale
+		err = chromedp.Run(ctx,
+			network.Enable(),
+			chromedp.Navigate(initialURL),
+			chromedp.WaitReady("body"),
+			chromedp.Evaluate(`window.location.href`, &finalURL),
+		)
+		if err != nil {
+			errorResponse := map[string]string{
+				"error":   "Target changed",
+				"message": fmt.Sprintf("The domain has changed from %s: %v", initialURL, err),
+			}
+	
+			jsonResponse, err := json.Marshal(errorResponse)
+			if err != nil {
+				log.Fatalf("Error marshalling JSON: %v", err)
+			}
+	
+			// Print the JSON response
+			fmt.Println(string(jsonResponse))
+			return
+		}
+
+		// Analyser l'URL finale pour obtenir le domaine et le port
+		finalParsedURL, err := url.Parse(finalURL)
+		if err != nil {
+			errorResponse := map[string]string{
+				"error":   "Target changed",
+				"message": fmt.Sprintf("The domain has changed from %s: %v", finalURL, err),
+			}
+	
+			jsonResponse, err := json.Marshal(errorResponse)
+			if err != nil {
+				log.Fatalf("Error marshalling JSON: %v", err)
+			}
+	
+			// Print the JSON response
+			fmt.Println(string(jsonResponse))
+			return
+		}
+		finalDomain := finalParsedURL.Hostname()
+		finalPort := finalParsedURL.Port()
+		if finalPort == "" {
+			// Si le port n'est pas spécifié, utiliser le port par défaut en fonction du schéma
+			if finalParsedURL.Scheme == "https" {
+				finalPort = "443"
+			} else {
+				finalPort = "80"
 			}
 		}
-	} else {
-		data, TempResp, _ = c.DefineBasicMetric(data, resp)
-		if data.Infos.Scheme == "" {
-			data.Infos.Scheme = "https"
+
+		// Vérifier si le domaine ou le port a changé
+		if initialDomain != finalDomain || initialPort != finalPort {
+			errorResponse := map[string]string{
+				"error":   "Target changed",
+				"message": fmt.Sprintf("The domain or port has changed from %s:%s to %s:%s", initialDomain, initialPort, finalDomain, finalPort),
+			}
+	
+			jsonResponse, err := json.Marshal(errorResponse)
+			if err != nil {
+				log.Fatalf("Error marshalling JSON: %v", err)
+			}
+	
+			// Print the JSON response
+			fmt.Println(string(jsonResponse))
+			// fmt.Println("Chaîne de redirection :")
+			// for _, u := range redirectChain {
+			// 	fmt.Println("->", u)
+			// }
+			return
 		}
-		urlData = "https://" + urlDataPort
-		data.Url = urlData
-	}
-	if errorContinue {
-		c.launchChrome(TempResp, data, urlData, port, results)
+
+		// Continuer avec le reste du traitement
+		data.Infos.Status_code = int(statusCode)
+		data.Infos.Scheme = finalParsedURL.Scheme
+		data.Url = finalURL
+
+		// Appeler launchChrome avec l'URL finale
+		c.launchChrome(structure.Response{}, data, finalURL, port, results)
+	} else {
+		// Utiliser le client HTTP standard sans suivre les redirections
+		http.DefaultTransport.(*http.Transport).TLSClientConfig = &tls.Config{InsecureSkipVerify: true}
+		if *c.Options.Proxy != "" {
+			proxyURL, parseErr := url.Parse(*c.Options.Proxy)
+			if parseErr == nil {
+				http.DefaultTransport.(*http.Transport).Proxy = http.ProxyURL(proxyURL)
+				http.DefaultTransport.(*http.Transport).TLSClientConfig = &tls.Config{InsecureSkipVerify: true, MinVersion: tls.VersionTLS12, MaxVersion: tls.VersionTLS12}
+			}
+		}
+		client := c.getClientCtx()
+
+		// S'assurer que le client ne suit pas les redirections
+		client.CheckRedirect = func(req *http.Request, via []*http.Request) error {
+			return http.ErrUseLastResponse
+		}
+
+		var TempResp structure.Response
+		var errSSL error
+		if port != "80" {
+			request, _ := http.NewRequest("GET", "https://"+urlDataPort, nil)
+			resp, errSSL = Do(request, client, false)
+		}
+		if errSSL != nil || port == "80" {
+			if port == "443" {
+				errorContinue = false
+			} else {
+				request, _ := http.NewRequest("GET", "http://"+urlDataPort, nil)
+				resp, errPlain := Do(request, client, false)
+				if errPlain != nil || resp == nil {
+					errorContinue = false
+				} else {
+					data, TempResp, _ = c.DefineBasicMetric(data, resp)
+					if data.Infos.Scheme == "" {
+						data.Infos.Scheme = "http"
+					}
+					urlData = "http://" + urlDataPort
+					data.Url = urlData
+				}
+			}
+		} else {
+			data, TempResp, _ = c.DefineBasicMetric(data, resp)
+			if data.Infos.Scheme == "" {
+				data.Infos.Scheme = "https"
+			}
+			urlData = "https://" + urlDataPort
+			data.Url = urlData
+		}
+
+		if errorContinue {
+			// Comparer les domaines et les ports
+			var finalDomain string
+			var finalPort string
+			if resp != nil && resp.URL != nil {
+				finalDomain = resp.URL.Hostname()
+				finalPort = resp.URL.Port()
+				if finalPort == "" {
+					// Si le port n'est pas spécifié, utiliser le port par défaut en fonction du schéma
+					if resp.URL.Scheme == "https" {
+						finalPort = "443"
+					} else {
+						finalPort = "80"
+					}
+				}
+			} else {
+				finalDomain = initialDomain
+				finalPort = initialPort
+			}
+
+			if initialDomain != finalDomain || initialPort != finalPort {
+				errorResponse := map[string]string{
+					"error":   "Target changed",
+					"message": fmt.Sprintf("The domain or port has changed from %s:%s to %s:%s", initialDomain, initialPort, finalDomain, finalPort),
+				}
+		
+				jsonResponse, err := json.Marshal(errorResponse)
+				if err != nil {
+					log.Fatalf("Error marshalling JSON: %v", err)
+				}
+		
+				// Print the JSON response
+				fmt.Println(string(jsonResponse))
+				return
+			}
+
+			c.launchChrome(TempResp, data, urlData, port, results)
+		}
 	}
 }
 
@@ -316,16 +499,16 @@ func (c *Cmd) launchChrome(TempResp structure.Response, data structure.Data, url
 			if err == nil {
 				reader := strings.NewReader(body)
 				doc, err := goquery.NewDocumentFromReader(reader)
-	
+
 				if err != nil {
 					log.Fatal(err)
 				}
 				var srcList []string
 				doc.Find("script").Each(func(i int, s *goquery.Selection) {
 					srcLink, exist := s.Attr("src")
-	
+
 					if exist {
-	
+
 						//fmt.Println(srcList, srcLink)
 						srcList = append(srcList, srcLink)
 					}
@@ -336,7 +519,7 @@ func (c *Cmd) launchChrome(TempResp structure.Response, data structure.Data, url
 
 			analyseStruct.ResultGlobal = c.ResultGlobal
 			analyseStruct.Resp = TempResp
-			
+
 			analyseStruct.Ctx = ctx
 			analyseStruct.Hote = data.Infos
 			analyseStruct.CookiesList = cookiesList
@@ -386,8 +569,38 @@ func (c *Cmd) scanPort(protocol, hostname string, port string, portTimeout int) 
 }
 
 // Do http request
-func Do(req *http.Request, client *http.Client) (*structure.Response, error) {
+func Do(req *http.Request, parentClient *http.Client, followRedirect bool) (*structure.Response, error) {
 	var gzipRetry bool
+	var redirectChain []*url.URL
+	finalURL := req.URL
+
+	// Clone le transport du client parent
+	transport, ok := parentClient.Transport.(*http.Transport)
+	if !ok {
+		return nil, errors.New("unsupported transport type")
+	}
+
+	newTransport := transport.Clone()
+
+	// Créer un nouveau client avec une fonction CheckRedirect personnalisée
+	client := &http.Client{
+		Transport: newTransport,
+		Timeout:   parentClient.Timeout,
+		Jar:       parentClient.Jar,
+	}
+
+	if followRedirect {
+		client.CheckRedirect = func(req *http.Request, via []*http.Request) error {
+			redirectChain = append(redirectChain, req.URL)
+			finalURL = req.URL
+			return nil // Continue à suivre les redirections
+		}
+	} else {
+		client.CheckRedirect = func(req *http.Request, via []*http.Request) error {
+			return http.ErrUseLastResponse // Ne pas suivre les redirections
+		}
+	}
+
 get_response:
 	httpresp, err := client.Do(req)
 	if err != nil {
@@ -395,6 +608,10 @@ get_response:
 	}
 
 	var resp structure.Response
+
+	// Définit resp.URL sur l'URL finale après toutes les redirections
+	resp.URL = finalURL
+	resp.RedirectChain = redirectChain // Stocke la chaîne de redirection
 
 	resp.Headers = httpresp.Header.Clone()
 
@@ -477,7 +694,7 @@ func (c *Cmd) InitDialer() *fastdialer.Dialer {
 }
 
 func (c *Cmd) getClientCtx() *http.Client {
-	if c.HttpClient == (&http.Client{}) {
+	if c.HttpClient == nil {
 		transport := &http.Transport{
 			TLSClientConfig: &tls.Config{
 				InsecureSkipVerify: true,
@@ -497,12 +714,7 @@ func (c *Cmd) getClientCtx() *http.Client {
 			Timeout:   10 * time.Second,
 			Transport: transport,
 		}
-		if !*c.Options.FollowRedirect {
-			client.CheckRedirect = func(req *http.Request, via []*http.Request) error {
-				//data.Infos.Location = fmt.Sprintf("%s", req.URL)
-				return http.ErrUseLastResponse
-			}
-		}
+		// Ne pas définir CheckRedirect ici, il sera géré dans la fonction Do
 		return client
 	} else {
 		return c.HttpClient
