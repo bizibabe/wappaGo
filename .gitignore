@@ -3,4 +3,4 @@ targets.txt
 test.go
 wappaGo.exe
 wappaGo
-./technologies_json/*
+technologies_json/*
