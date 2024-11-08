@@ -41,6 +41,8 @@ func  (a *Analyze) analyze_meta(s *goquery.Selection,metaProperties interface{},
 			if len(versionGrp) > 1 {
 				offset, _ := strconv.Atoi(versionGrp[1])
 				technoTemp.Version = regexGroup[0][offset]
+			}else{
+				technoTemp.Version = ""
 			}
 		}
 		a.Technos = append(a.Technos, technoTemp)

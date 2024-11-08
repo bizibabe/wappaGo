@@ -34,6 +34,8 @@ func  (a *Analyze) analyze_scriptSrc(technoName string,regexStr string,scriptCrc
 			if len(versionGrp) > 1 {
 				offset, _ := strconv.Atoi(versionGrp[1])
 				technoTemp.Version = regexGroup[0][offset]
+			} else{
+				technoTemp.Version = ""
 			}
 		}
 		a.Technos = append(a.Technos, technoTemp)

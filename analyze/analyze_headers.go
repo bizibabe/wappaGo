@@ -30,6 +30,8 @@ func (a *Analyze)analyze_headers_main(technoName string,key string){
 								offset, _ := strconv.Atoi(versionGrp[1])
 								//fmt.Println(regexGroup[0][offset])
 								technoTemp.Version = regexGroup[0][offset]
+							}else{
+								technoTemp.Version = ""
 							}
 						}
 						a.Technos = append(a.Technos, technoTemp)
