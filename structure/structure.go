@@ -9,7 +9,7 @@ import (
 
 type Technologie struct {
 	Name       string `json:"name"`
-	Version    string `json:"version,omitempty"`
+	Version    string `json:"version"`
 	Cpe        string `json:"cpe,omitempty"`
 	Confidence string `json:"confidence,omitempty"`
 }
@@ -17,7 +17,7 @@ type Technologie struct {
 const WappazlyerRoot = "https://raw.githubusercontent.com/dochne/wappalyzer/master/src"
 const LetterBytes = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ"
 
-var InterrestingKey = []string{"dns", "js", "meta", "text", "dom", "script", "html", "scriptSrc", "headers", "cookies", "url", "certIssuer", "xhr"}
+var InterrestingKey = []string{"dns", "js", "meta", "text", "dom", "scripts", "html", "scriptSrc", "headers", "cookies", "url", "certIssuer", "xhr"}
 
 type Host struct {
 	Status_code    int           `json:"status_code"`

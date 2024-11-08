@@ -406,22 +406,33 @@ func (c *Cmd) launchChrome(TempResp structure.Response, data structure.Data, url
 	ctxAlloc1, _ := context.WithTimeout(c.ChromeCtx, 60*time.Second)
 	cloneCTX, cancel := chromedp.NewContext(ctxAlloc1)
 	chromedp.ListenTarget(cloneCTX, func(ev interface{}) {
-		if _, ok := ev.(*network.EventResponseReceived); ok {
-			//data, _ := network.GetResponseBody(ev.(*network.EventResponseReceived).RequestID).Do(cloneCTX)
+		if responseEvent, ok := ev.(*network.EventResponseReceived); ok {
+			// Store headers in TempResp.Headers
+			if TempResp.Headers == nil {
+				TempResp.Headers = make(map[string][]string)
+			}
+			for key, value := range responseEvent.Response.Headers {
+				// Ensure the value is converted to []string
+				switch v := value.(type) {
+				case string:
+					TempResp.Headers[key] = []string{v}
+				case []string:
+					TempResp.Headers[key] = v
+				}
+			}
 
-			//log.Println(string(data))
-			switch typeDoc := ev.(*network.EventResponseReceived).Type; typeDoc {
+			// Process document types
+			switch typeDoc := responseEvent.Type; typeDoc {
 			case "XHR":
-				analyseStruct.XHRUrl = append(analyseStruct.XHRUrl, ev.(*network.EventResponseReceived).Response.URL)
+				analyseStruct.XHRUrl = append(analyseStruct.XHRUrl, responseEvent.Response.URL)
 			case "Stylesheet":
-				//analyseStruct.CSSContent = append(analyseStruct.CSSContent,ev.(*network.EventResponseReceived).Response.URL)
-
+				// Stylesheet processing (currently commented)
 			case "Script":
-				//analyseStruct.CSSContent = append(analyseStruct.CSSContent,ev.(*network.EventResponseReceived).Response.URL)
+				// Script processing (currently commented)
 			}
 		}
+		// Handling JavaScript dialog if it opens
 		if _, ok := ev.(*page.EventJavascriptDialogOpening); ok {
-			//fmt.Println("closing alert:", ev.Message)
 			go func() {
 				if err := chromedp.Run(cloneCTX,
 					page.HandleJavaScriptDialog(true),
@@ -436,18 +447,16 @@ func (c *Cmd) launchChrome(TempResp structure.Response, data structure.Data, url
 			}()
 		}
 	})
-	defer cancel()
-	// run task list
-	//var res []string
-	var buf []byte
 
+	defer cancel()
+
+	// Run task list
+	var buf []byte
 	err = chromedp.Run(cloneCTX,
 		chromedp.Navigate(urlData),
 		chromedp.Title(&data.Infos.Title),
-		//chromedp.FullScreenshot(&buf, 100),
 		chromedp.CaptureScreenshot(&buf),
 		chromedp.ActionFunc(func(ctx context.Context) error {
-
 			cookiesList, _ := network.GetCookies().Do(ctx)
 			if strings.HasPrefix(urlData, "https://") {
 				sslcert, _ := network.GetCertificate(urlData).Do(ctx)
@@ -466,17 +475,13 @@ func (c *Cmd) launchChrome(TempResp structure.Response, data structure.Data, url
 			if err == nil {
 				reader := strings.NewReader(body)
 				doc, err := goquery.NewDocumentFromReader(reader)
-
 				if err != nil {
 					log.Fatal(err)
 				}
 				var srcList []string
 				doc.Find("script").Each(func(i int, s *goquery.Selection) {
 					srcLink, exist := s.Attr("src")
-
 					if exist {
-
-						//fmt.Println(srcList, srcLink)
 						srcList = append(srcList, srcLink)
 					}
 				})
@@ -486,12 +491,10 @@ func (c *Cmd) launchChrome(TempResp structure.Response, data structure.Data, url
 
 			analyseStruct.ResultGlobal = c.ResultGlobal
 			analyseStruct.Resp = TempResp
-
 			analyseStruct.Ctx = ctx
 			analyseStruct.Hote = data.Infos
 			analyseStruct.CookiesList = cookiesList
 			analyseStruct.Node = node
-
 			analyseStruct.Technos = []structure.Technologie{}
 			analyseStruct.DnsData = dnsData
 			data.Infos.Technologies = analyseStruct.Run()
@@ -505,7 +508,6 @@ func (c *Cmd) launchChrome(TempResp structure.Response, data structure.Data, url
 		imgTitle := strings.Replace(urlData, ":", "_", -1)
 		imgTitle = strings.Replace(imgTitle, "/", "", -1)
 		imgTitle = strings.Replace(imgTitle, ".", "_", -1)
-		//fmt.Println(screen + "/" + imgTitle + ".png")
 		file, _ := os.OpenFile(
 			*c.Options.Screenshot+"/"+imgTitle+".png",
 			os.O_WRONLY|os.O_TRUNC|os.O_CREATE,
@@ -580,8 +582,6 @@ get_response:
 	resp.URL = finalURL
 	resp.RedirectChain = redirectChain // Stocke la chaîne de redirection
 
-	resp.Headers = httpresp.Header.Clone()
-
 	// httputil.DumpResponse does not handle websockets
 	headers, rawResp, err := pdhttputil.DumpResponseHeadersAndRaw(httpresp)
 	if err != nil {
@@ -594,9 +594,9 @@ get_response:
 		}
 
 		return nil, err
-
 	}
 	resp.Raw = string(rawResp)
+	//fmt.Println(resp.RawHeaders)
 	resp.RawHeaders = string(headers)
 
 	var respbody []byte
@@ -605,7 +605,6 @@ get_response:
 		var err error
 		respbody, err = ioutil.ReadAll(io.LimitReader(httpresp.Body, 4096))
 		if err != nil {
-
 			return nil, err
 		}
 	}
