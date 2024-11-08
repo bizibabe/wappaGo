@@ -25,6 +25,7 @@ import (
 	"github.com/EasyRecon/wappaGo/report"
 	"github.com/EasyRecon/wappaGo/structure"
 	"github.com/EasyRecon/wappaGo/technologies"
+	"github.com/EasyRecon/wappaGo/utils"
 	"github.com/PuerkitoBio/goquery"
 	"github.com/chromedp/cdproto/dom"
 	"github.com/chromedp/cdproto/network"
@@ -209,15 +210,8 @@ func (c *Cmd) getWrapper(urlData string, port string, data structure.Data, resul
 
 	initialParsedURL, err := url.Parse(initialURL)
 	if err != nil {
-		errorResponse := map[string]string{
-			"error":   "Target changed",
-			"message": fmt.Sprintf("Error parsing initial URL %s: %v", initialURL, err),
-		}
-
-		jsonResponse, err := json.Marshal(errorResponse)
-		if err != nil {
-			log.Fatalf("Error marshalling JSON: %v", err)
-		}
+		msg := fmt.Sprintf("Error parsing initial URL %s: %v", initialURL, err)
+		jsonResponse := utils.GenerateErrorMessage("Target changed", msg)
 
 		// Print the JSON response
 		fmt.Println(string(jsonResponse))
@@ -265,16 +259,9 @@ func (c *Cmd) getWrapper(urlData string, port string, data structure.Data, resul
 			chromedp.Evaluate(`window.location.href`, &finalURL),
 		)
 		if err != nil {
-			errorResponse := map[string]string{
-				"error":   "Target changed",
-				"message": fmt.Sprintf("The domain has changed from %s: %v", initialURL, err),
-			}
-	
-			jsonResponse, err := json.Marshal(errorResponse)
-			if err != nil {
-				log.Fatalf("Error marshalling JSON: %v", err)
-			}
-	
+			msg := fmt.Sprintf("The domain has changed from %s: %v", initialURL, err)
+			jsonResponse := utils.GenerateErrorMessage("Target changed", msg)
+
 			// Print the JSON response
 			fmt.Println(string(jsonResponse))
 			return
@@ -283,16 +270,9 @@ func (c *Cmd) getWrapper(urlData string, port string, data structure.Data, resul
 		// Analyser l'URL finale pour obtenir le domaine et le port
 		finalParsedURL, err := url.Parse(finalURL)
 		if err != nil {
-			errorResponse := map[string]string{
-				"error":   "Target changed",
-				"message": fmt.Sprintf("The domain has changed from %s: %v", finalURL, err),
-			}
-	
-			jsonResponse, err := json.Marshal(errorResponse)
-			if err != nil {
-				log.Fatalf("Error marshalling JSON: %v", err)
-			}
-	
+			msg := fmt.Sprintf("The domain has changed from %s: %v", finalURL, err)
+			jsonResponse := utils.GenerateErrorMessage("Target changed", msg)
+
 			// Print the JSON response
 			fmt.Println(string(jsonResponse))
 			return
@@ -310,16 +290,9 @@ func (c *Cmd) getWrapper(urlData string, port string, data structure.Data, resul
 
 		// Vérifier si le domaine ou le port a changé
 		if initialDomain != finalDomain || initialPort != finalPort {
-			errorResponse := map[string]string{
-				"error":   "Target changed",
-				"message": fmt.Sprintf("The domain or port has changed from %s:%s to %s:%s", initialDomain, initialPort, finalDomain, finalPort),
-			}
-	
-			jsonResponse, err := json.Marshal(errorResponse)
-			if err != nil {
-				log.Fatalf("Error marshalling JSON: %v", err)
-			}
-	
+			msg := fmt.Sprintf("The domain or port has changed from %s:%s to %s:%s", initialDomain, initialPort, finalDomain, finalPort)
+			jsonResponse := utils.GenerateErrorMessage("Target changed", msg)
+
 			// Print the JSON response
 			fmt.Println(string(jsonResponse))
 			// fmt.Println("Chaîne de redirection :")
@@ -406,16 +379,10 @@ func (c *Cmd) getWrapper(urlData string, port string, data structure.Data, resul
 			}
 
 			if initialDomain != finalDomain || initialPort != finalPort {
-				errorResponse := map[string]string{
-					"error":   "Target changed",
-					"message": fmt.Sprintf("The domain or port has changed from %s:%s to %s:%s", initialDomain, initialPort, finalDomain, finalPort),
-				}
-		
-				jsonResponse, err := json.Marshal(errorResponse)
-				if err != nil {
-					log.Fatalf("Error marshalling JSON: %v", err)
-				}
-		
+
+				msg := fmt.Sprintf("The domain or port has changed from %s:%s to %s:%s", initialDomain, initialPort, finalDomain, finalPort)
+				jsonResponse := utils.GenerateErrorMessage("Target changed", msg)
+
 				// Print the JSON response
 				fmt.Println(string(jsonResponse))
 				return

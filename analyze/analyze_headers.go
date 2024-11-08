@@ -5,11 +5,11 @@ import (
 	"regexp"
 	"strconv"
 	"strings"
+
 	"github.com/EasyRecon/wappaGo/technologies"
 )
 
-
-func (a *Analyze)analyze_headers_main(technoName string,key string){
+func (a *Analyze) analyze_headers_main(technoName string, key string) {
 	for header, _ := range a.ResultGlobal[technoName].(map[string]interface{})[key].(map[string]interface{}) {
 		for headerName, _ := range a.Resp.Headers {
 			if strings.ToLower(header) == strings.ToLower(headerName) {
@@ -24,14 +24,13 @@ func (a *Analyze)analyze_headers_main(technoName string,key string){
 						compiledregex := regexp.MustCompile("(?i)" + regex[0])
 						regexGroup := compiledregex.FindAllStringSubmatch(a.Resp.Headers[headerName][0], -1)
 
+						technoTemp.Version = ""
 						if len(regex) > 1 && strings.HasPrefix(regex[1], "version") {
 							versionGrp := strings.Split(regex[1], "\\")
 							if len(versionGrp) > 1 {
 								offset, _ := strconv.Atoi(versionGrp[1])
 								//fmt.Println(regexGroup[0][offset])
 								technoTemp.Version = regexGroup[0][offset]
-							}else{
-								technoTemp.Version = ""
 							}
 						}
 						a.Technos = append(a.Technos, technoTemp)
@@ -39,8 +38,8 @@ func (a *Analyze)analyze_headers_main(technoName string,key string){
 					}
 				} else {
 					technoTemp := a.NewTechno(technoName)
-						a.Technos = append(a.Technos, technoTemp)
-						a.Technos = technologies.CheckRequired(technoTemp.Name, a.ResultGlobal, a.Technos)
+					a.Technos = append(a.Technos, technoTemp)
+					a.Technos = technologies.CheckRequired(technoTemp.Name, a.ResultGlobal, a.Technos)
 				}
 			}
 		}

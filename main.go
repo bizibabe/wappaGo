@@ -40,11 +40,9 @@ func configure(options structure.Options) {
 			}
 		}
 	}
-	folder, errDownload := technologies.DownloadTechnologies()
-	if errDownload != nil {
-		log.Println("error during downloading techno file")
-	}
-	defer os.RemoveAll(folder)
+
+	folder := "technologies_json"
+	technologies.EmbedTechnologies(folder)
 
 	var input []string
 	var scanner = bufio.NewScanner(bufio.NewReader(os.Stdin))

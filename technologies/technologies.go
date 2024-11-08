@@ -1,64 +1,69 @@
 package technologies
 
 import (
+	"embed"
 	"encoding/json"
 	"fmt"
+	"io/fs"
 	"io/ioutil"
-	"net/http"
+	"log"
 	"os"
+	"path/filepath"
 
 	"github.com/EasyRecon/wappaGo/lib"
 	"github.com/EasyRecon/wappaGo/structure"
+	"github.com/EasyRecon/wappaGo/utils"
 	"github.com/imdario/mergo"
 )
+
 func CheckRequired(technoName string, technoList map[string]interface{}, tech []structure.Technologie) []structure.Technologie {
 	for name, _ := range technoList[technoName].(map[string]interface{}) {
 		if name == "requires" {
 			requires := technoList[technoName].(map[string]interface{})["requires"]
 			// Tentative d'assertion du type directement en string
 			if reqString, ok := requires.(string); ok {
-			    tech = AddTechno(reqString, tech, technoList)
+				tech = AddTechno(reqString, tech, technoList)
 			} else if reqMap, ok := requires.(map[string]interface{}); ok {
-			    // Le contenu de requires est un map[string]interface{}, on itère sur les clés
-			    for req := range reqMap {
-			        tech = AddTechno(req, tech, technoList)
-			    }
+				// Le contenu de requires est un map[string]interface{}, on itère sur les clés
+				for req := range reqMap {
+					tech = AddTechno(req, tech, technoList)
+				}
 			} else if reqSlice, ok := requires.([]interface{}); ok {
-			    // Le contenu de requires est un slice d'interface{}, on itère sur les éléments
-			    for _, item := range reqSlice {
-			        if itemStr, ok := item.(string); ok {
-			            tech = AddTechno(itemStr, tech, technoList)
-			        } else {
-			            fmt.Println("Unsupported item type in 'requires' slice")
-			        }
-			    }
+				// Le contenu de requires est un slice d'interface{}, on itère sur les éléments
+				for _, item := range reqSlice {
+					if itemStr, ok := item.(string); ok {
+						tech = AddTechno(itemStr, tech, technoList)
+					} else {
+						fmt.Println("Unsupported item type in 'requires' slice")
+					}
+				}
 			} else {
-			    // Si aucun des types attendus n'est rencontré, affiche une erreur
-			    fmt.Println("Unexpected type for 'requires'")
+				// Si aucun des types attendus n'est rencontré, affiche une erreur
+				fmt.Println("Unexpected type for 'requires'")
 			}
 		}
 		if name == "implies" {
 			implies := technoList[technoName].(map[string]interface{})["implies"]
 			switch v := implies.(type) {
 			case string:
-			    // Si c'est une chaîne, on ajoute directement la technologie
-			    tech = AddTechno(v, tech, technoList)
+				// Si c'est une chaîne, on ajoute directement la technologie
+				tech = AddTechno(v, tech, technoList)
 			case []interface{}:
-			    // Si c'est un slice, on itère sur chaque élément
-			    for _, item := range v {
-			        if strItem, ok := item.(string); ok {
-			            tech = AddTechno(strItem, tech, technoList)
-			        } else {
-			            fmt.Println("Unexpected item type in 'implies' slice")
-			        }
-			    }
+				// Si c'est un slice, on itère sur chaque élément
+				for _, item := range v {
+					if strItem, ok := item.(string); ok {
+						tech = AddTechno(strItem, tech, technoList)
+					} else {
+						fmt.Println("Unexpected item type in 'implies' slice")
+					}
+				}
 			case map[string]interface{}:
-			    // Si c'est un map, on itère sur chaque clé
-			    for key := range v {
-			        tech = AddTechno(key, tech, technoList)
-			    }
+				// Si c'est un map, on itère sur chaque clé
+				for key := range v {
+					tech = AddTechno(key, tech, technoList)
+				}
 			default:
-			    fmt.Println("Unexpected type for 'implies'")
+				fmt.Println("Unexpected type for 'implies'")
 			}
 		}
 	}
@@ -72,31 +77,6 @@ func AddTechno(name string, tech []structure.Technologie, technoList map[string]
 	}
 	tech = append(tech, technoTemp)
 	return tech
-}
-
-func DownloadTechnologies() (string, error) {
-	files := []string{"_", "a", "b", "c", "d", "e", "f", "g", "h", "i", "j", "k", "l", "m", "n", "o", "p", "q", "r", "s", "t", "u", "v", "w", "x", "y", "z"}
-	folder := lib.RandStringBytes(20)
-	_ = os.Mkdir(folder, 0766)
-	for _, f := range files {
-		url := fmt.Sprintf("%v/technologies/%v.json", structure.WappazlyerRoot, f)
-		resp, err := http.Get(url)
-		if err != nil {
-			return "", err
-		}
-
-		body, err := ioutil.ReadAll(resp.Body)
-		resp.Body.Close()
-		file, _ := os.OpenFile(
-			folder+"/"+f+".json",
-			os.O_WRONLY|os.O_TRUNC|os.O_CREATE,
-			0666,
-		)
-		file.Write(body)
-		file.Close()
-
-	}
-	return folder, nil
 }
 
 func LoadTechnologiesFiles(folder string) map[string]interface{} {
@@ -123,6 +103,65 @@ func LoadTechnologiesFiles(folder string) map[string]interface{} {
 	}
 	return resultGlobal
 }
+
+//go:embed technologies_json/*.json
+var embeddedFiles embed.FS
+
+func EmbedTechnologies(folder string) {
+	// Check if the folder already exists
+	if _, err := os.Stat(folder); os.IsNotExist(err) {
+		// Create the folder if it does not exist
+		if err := os.MkdirAll(folder, os.ModePerm); err != nil {
+			msg := fmt.Sprintf("Error creating folder %s: %v", folder, err)
+			jsonResponse := utils.GenerateErrorMessage("Embed", msg)
+			log.Fatal(jsonResponse)
+		}
+	}
+
+	// Traverse embedded files and write them to the folder if they do not already exist
+	err := fs.WalkDir(embeddedFiles, "technologies_json", func(path string, d fs.DirEntry, err error) error {
+		if err != nil {
+			return err
+		}
+
+		// Skip directories
+		if d.IsDir() {
+			return nil
+		}
+
+		// Determine the output file name
+		outputFilePath := filepath.Join(folder, filepath.Base(path))
+
+		// Check if the file already exists
+		if _, err := os.Stat(outputFilePath); err == nil {
+			return nil
+		}
+
+		// Read the content of the embedded file
+		fileData, err := embeddedFiles.ReadFile(path)
+		if err != nil {
+			msg := fmt.Sprintf("Error reading file %s: %v", path, err)
+			jsonResponse := utils.GenerateErrorMessage("Embed", msg)
+			log.Fatal(jsonResponse)
+		}
+
+		// Write the content to the output file
+		if err := ioutil.WriteFile(outputFilePath, fileData, 0644); err != nil {
+			msg := fmt.Sprintf("Error writing file %s: %v", outputFilePath, err)
+			jsonResponse := utils.GenerateErrorMessage("Embed", msg)
+			log.Fatal(jsonResponse)
+		}
+
+		return nil
+	})
+
+	if err != nil {
+		msg := fmt.Sprintf("Error retrieving embedded files: %v", err)
+		jsonResponse := utils.GenerateErrorMessage("Embed", msg)
+		log.Fatal(jsonResponse)
+	}
+}
+
 func DedupTechno(technologies []structure.Technologie) []structure.Technologie {
 	var output []structure.Technologie
 	add := true

@@ -3,21 +3,21 @@ package analyze
 import (
 	"fmt"
 	"strings"
+
 	"github.com/EasyRecon/wappaGo/technologies"
 	"github.com/chromedp/chromedp"
-
 )
 
-func (a *Analyze) analyze_js_main(technoName string,key string){
+func (a *Analyze) analyze_js_main(technoName string, key string) {
 	for js, _ := range a.ResultGlobal[technoName].(map[string]interface{})[key].(map[string]interface{}) {
 		if a.ResultGlobal[technoName].(map[string]interface{})[key].(map[string]interface{})[js] != "" { // just check if existe & match regex
-			a.analyze_js_valued(fmt.Sprintf("%v", a.ResultGlobal[technoName].(map[string]interface{})[key].(map[string]interface{})[js]),js,technoName)
+			a.analyze_js_valued(fmt.Sprintf("%v", a.ResultGlobal[technoName].(map[string]interface{})[key].(map[string]interface{})[js]), js, technoName)
 		} else { // just check if existe
-			a.analyze_js_exist(js,technoName)
+			a.analyze_js_exist(js, technoName)
 		}
 	}
 }
-func  (a *Analyze) analyze_js_valued(regexStr string, js string, technoName string){
+func (a *Analyze) analyze_js_valued(regexStr string, js string, technoName string) {
 	regex := strings.Split(regexStr, "\\;")
 	var res interface{}
 	if regex[0] != "" {
@@ -35,8 +35,9 @@ func  (a *Analyze) analyze_js_valued(regexStr string, js string, technoName stri
 				technoTemp.Confidence = strings.Split(regex[1], ":")[1]
 			}
 		}
+		technoTemp.Version = ""
 		if (len(regex) > 1 && strings.HasPrefix(regex[1], "version")) || (len(regex) > 2 && strings.HasPrefix(regex[2], "version")) {
-										//fmt.Println(res,technoName,regex)
+			//fmt.Println(res,technoName,regex)
 			if len(regex) > 1 && strings.HasPrefix(regex[1], "version") {
 				technoTemp.Version = fmt.Sprintf("%v", res)
 			}
@@ -49,7 +50,7 @@ func  (a *Analyze) analyze_js_valued(regexStr string, js string, technoName stri
 	}
 }
 
-func  (a *Analyze) analyze_js_exist(js string,technoName string){
+func (a *Analyze) analyze_js_exist(js string, technoName string) {
 	var res interface{}
 	chromedp.Evaluate("(()=>{ return (typeof "+js+" !== 'undefined' ? true : false)})()", &res).Do(a.Ctx)
 	if res == true {

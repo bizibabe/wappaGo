@@ -1,19 +1,17 @@
 package analyze
 
-
 import (
 	"fmt"
 	"regexp"
 	"strconv"
 	"strings"
+
 	"github.com/EasyRecon/wappaGo/technologies"
 	"github.com/PuerkitoBio/goquery"
 	"github.com/chromedp/chromedp"
 )
 
-
-
-func (a *Analyze)analyze_dom_main(technoName string,key string, doc *goquery.Document){
+func (a *Analyze) analyze_dom_main(technoName string, key string, doc *goquery.Document) {
 	if fmt.Sprintf("%T", a.ResultGlobal[technoName].(map[string]interface{})[key]) == "string" {
 		doc.Find(a.ResultGlobal[technoName].(map[string]interface{})[key].(string)).Each(func(i int, s *goquery.Selection) {
 			technoTemp := a.NewTechno(technoName)
@@ -25,16 +23,16 @@ func (a *Analyze)analyze_dom_main(technoName string,key string, doc *goquery.Doc
 			for domKeyElement, domElement := range domArray.(map[string]interface{}) {
 				if fmt.Sprintf("%T", domElement) == "string" {
 					doc.Find(domKey).Each(func(i int, s *goquery.Selection) {
-						a.analyze_dom_valued(technoName,domElement)
+						a.analyze_dom_valued(technoName, domElement)
 					})
 				} else if fmt.Sprintf("%T", domElement) == "map[string]interface {}" {
 					for domKeyElement2, domElement2 := range domElement.(map[string]interface{}) {
 						if domKeyElement == "attributes" {
 							doc.Find(domKey).Each(func(i int, s *goquery.Selection) {
-								a.analyze_dom_attribute(technoName,domKeyElement2,domElement2,s)
+								a.analyze_dom_attribute(technoName, domKeyElement2, domElement2, s)
 							})
 						} else {
-							a.analyze_dom_exist(technoName,domKeyElement2,domKey)
+							a.analyze_dom_exist(technoName, domKeyElement2, domKey)
 						}
 					}
 				}
@@ -48,21 +46,20 @@ func (a *Analyze)analyze_dom_main(technoName string,key string, doc *goquery.Doc
 				a.Technos = technologies.CheckRequired(technoTemp.Name, a.ResultGlobal, a.Technos)
 			})
 		}
-	}			
+	}
 }
-func  (a *Analyze) analyze_dom_exist(technoName string,domKeyElement2 string,domKey string ){
+func (a *Analyze) analyze_dom_exist(technoName string, domKeyElement2 string, domKey string) {
 	var res interface{}
 	chromedp.Evaluate("(()=>{a=false;document.querySelectorAll('"+domKey+"').forEach(element=>{if(element."+domKeyElement2+"!=undefined){a=true}});return a})()", &res).Do(a.Ctx)
 	//fmt.Println(res, "(()=>{a=false;document.querySelectorAll('"+domKey+"').forEach(element=>{if(element."+domKeyElement2+"!=undefined){a=true}});return a})()")
 	if res == true {
-		technoTemp := a.NewTechno(technoName)												
+		technoTemp := a.NewTechno(technoName)
 		a.Technos = append(a.Technos, technoTemp)
 		a.Technos = technologies.CheckRequired(technoTemp.Name, a.ResultGlobal, a.Technos)
 	}
 }
 
-
-func  (a *Analyze) analyze_dom_attribute(technoName string,domKeyElement2 string,domElement2 interface{},s *goquery.Selection){
+func (a *Analyze) analyze_dom_attribute(technoName string, domKeyElement2 string, domElement2 interface{}, s *goquery.Selection) {
 	dommAttr, _ := s.Attr(domKeyElement2)
 	if dommAttr != "" {
 		if domKeyElement2 != "" {
@@ -72,16 +69,15 @@ func  (a *Analyze) analyze_dom_attribute(technoName string,domKeyElement2 string
 				technoTemp := a.NewTechno(technoName)
 				compiledregex := regexp.MustCompile("(?i)" + regex[0])
 				regexGroup := compiledregex.FindAllStringSubmatch(dommAttr, -1)
-																
+
+				technoTemp.Version = ""
 				if len(regex) > 1 && strings.HasPrefix(regex[1], "version") {
 					versionGrp := strings.Split(regex[1], "\\")
-																		
+
 					if len(versionGrp) > 1 {
 						offset, _ := strconv.Atoi(versionGrp[1])
-																			//fmt.Println(versionGrp)
+						//fmt.Println(versionGrp)
 						technoTemp.Version = regexGroup[0][offset]
-					}else{
-						technoTemp.Version = ""
 					}
 				}
 				a.Technos = append(a.Technos, technoTemp)
@@ -95,8 +91,7 @@ func  (a *Analyze) analyze_dom_attribute(technoName string,domKeyElement2 string
 	}
 }
 
-
-func  (a *Analyze) analyze_dom_valued(technoName string,domElement interface{}){
+func (a *Analyze) analyze_dom_valued(technoName string, domElement interface{}) {
 	if domElement == "" {
 		technoTemp := a.NewTechno(technoName)
 		a.Technos = append(a.Technos, technoTemp)
@@ -110,7 +105,8 @@ func  (a *Analyze) analyze_dom_valued(technoName string,domElement interface{}){
 			technoTemp := a.NewTechno(technoName)
 			compiledregex := regexp.MustCompile("(?i)" + regex[0])
 			regexGroup := compiledregex.FindAllStringSubmatch(a.Body, -1)
-			
+
+			technoTemp.Version = ""
 			if len(regex) > 1 && strings.HasPrefix(regex[1], "version") {
 				versionGrp := strings.Split(regex[1], "\\")
 
@@ -118,8 +114,6 @@ func  (a *Analyze) analyze_dom_valued(technoName string,domElement interface{}){
 					offset, _ := strconv.Atoi(versionGrp[1])
 					//fmt.Println(regexGroup[0][offset])
 					technoTemp.Version = regexGroup[0][offset]
-				}else{
-					technoTemp.Version = ""
 				}
 			}
 			a.Technos = append(a.Technos, technoTemp)

@@ -60,11 +60,8 @@ func configureOptions(wrapperOptions structure.WrapperOptions) cmd.Cmd {
 		}
 	}
 
-	folder, errDownload := technologies.DownloadTechnologies()
-	if errDownload != nil {
-		log.Println("error during downloading techno file")
-	}
-	defer os.RemoveAll(folder)
+	folder := "technologies_json"
+	technologies.EmbedTechnologies(folder)
 
 	c := cmd.Cmd{}
 	c.ResultGlobal = technologies.LoadTechnologiesFiles(folder)
