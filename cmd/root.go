@@ -178,15 +178,15 @@ func (c *Cmd) startPortScan(url string, ip string, results chan structure.Data) 
 	url = strings.TrimSpace(url)
 	for _, port := range portOpen {
 		swg.Add()
-		go func(port string, url string, portOpen []string, CdnName string, c *Cmd) {
+		go func(port string, url string, CdnName string, c *Cmd) {
 			defer swg.Done()
 			data := structure.Data{}
 			data.Infos.CDN = CdnName
 			data.Infos.Data = url
-			data.Infos.Ports = portOpen
+			data.Infos.Port = port
 			data.Infos.IP = ip
 			c.getWrapper(url, port, data, results)
-		}(port, url, portOpen, CdnName, c)
+		}(port, url, CdnName, c)
 	}
 	swg.Wait()
 }
@@ -255,7 +255,7 @@ func (c *Cmd) getWrapper(urlData string, port string, data structure.Data, resul
 			chromedp.Evaluate(`window.location.href`, &finalURL),
 		)
 		if err != nil {
-			data.Error = fmt.Sprintf("The domain has changed from %s: %v", initialURL, err)
+			data.Error = fmt.Sprintf("Webdriver error : %v", err)
 			results <- data
 			return
 		}
@@ -263,7 +263,7 @@ func (c *Cmd) getWrapper(urlData string, port string, data structure.Data, resul
 		// Analyser l'URL finale pour obtenir le domaine et le port
 		finalParsedURL, err := url.Parse(finalURL)
 		if err != nil {
-			data.Error = fmt.Sprintf("The domain has changed from %s: %v", finalURL, err)
+			data.Error = fmt.Sprintf("Error parsing final URL %s : %v", finalURL, err)
 			results <- data
 			return
 		}

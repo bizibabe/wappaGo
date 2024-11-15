@@ -21,7 +21,7 @@ var InterrestingKey = []string{"dns", "js", "meta", "text", "dom", "scripts", "h
 
 type Host struct {
 	Status_code    int           `json:"status_code"`
-	Ports          []string      `json:"ports"`
+	Port           string        `json:"port"`
 	Path           string        `json:"path"`
 	Location       string        `json:"location,omitempty"`
 	Title          string        `json:"title"`
