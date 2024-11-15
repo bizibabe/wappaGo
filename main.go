@@ -17,11 +17,10 @@ import (
 func main() {
 	options := structure.Options{}
 	options.Screenshot = flag.String("screenshot", "", "path to screenshot if empty no screenshot")
-	options.Ports = flag.String("ports", "80,443", "port want to scan separated by coma")
+	options.Ports = flag.String("ports", "80,443", "port want to scan separated by comma")
 	options.Threads = flag.Int("threads", 5, "Number of threads to start recon in same time")
 	options.Report = flag.Bool("report", false, "Generate HTML report")
 	options.Porttimeout = flag.Int("port-timeout", 2000, "Timeout during port scanning in ms")
-	//options.ChromeTimeout = flag.Int("chrome-timeout", 0000, "Timeout during navigation (chrome) in sec")
 	options.ChromeThreads = flag.Int("chrome-threads", 5, "Number of chromes threads in each main threads total = option.threads*option.chrome-threads (Default 5)")
 	options.Resolvers = flag.String("resolvers", "", "Use specifique resolver separated by comma")
 	options.AmassInput = flag.Bool("amass-input", false, "Pip directly on Amass (Amass json output) like amass -d domain.tld | wappaGo")
@@ -56,17 +55,21 @@ func configure(options structure.Options) {
 	c.Input = input
 
 	results := make(chan structure.Data)
+	var resultArray []structure.Data // Array to hold all results
 
 	go func() {
 		for result := range results {
-			b, err := json.Marshal(result)
-
-			if err != nil {
-				fmt.Println(err)
-			}
-			fmt.Println(string(b))
+			resultArray = append(resultArray, result)
 		}
 	}()
 
 	c.Start(results)
+
+	// Convert the accumulated results to a JSON array and print
+	b, err := json.MarshalIndent(resultArray, "", "  ")
+	if err != nil {
+		log.Println("Error marshalling results:", err)
+		return
+	}
+	fmt.Println(string(b))
 }

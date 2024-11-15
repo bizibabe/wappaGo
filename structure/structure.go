@@ -40,6 +40,7 @@ type Host struct {
 type Data struct {
 	Url   string `json:"url"`
 	Infos Host   `json:"infos"`
+	Error string `json:"error,omitempty"`
 }
 type Options struct {
 	Screenshot     *string

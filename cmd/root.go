@@ -25,7 +25,6 @@ import (
 	"github.com/EasyRecon/wappaGo/report"
 	"github.com/EasyRecon/wappaGo/structure"
 	"github.com/EasyRecon/wappaGo/technologies"
-	"github.com/EasyRecon/wappaGo/utils"
 	"github.com/PuerkitoBio/goquery"
 	"github.com/chromedp/cdproto/dom"
 	"github.com/chromedp/cdproto/network"
@@ -210,11 +209,8 @@ func (c *Cmd) getWrapper(urlData string, port string, data structure.Data, resul
 
 	initialParsedURL, err := url.Parse(initialURL)
 	if err != nil {
-		msg := fmt.Sprintf("Error parsing initial URL %s: %v", initialURL, err)
-		jsonResponse := utils.GenerateErrorMessage("Target changed", msg)
-
-		// Print the JSON response
-		fmt.Println(string(jsonResponse))
+		data.Error = fmt.Sprintf("Error parsing initial URL %s: %v", initialURL, err)
+		results <- data
 		return
 	}
 	initialDomain := initialParsedURL.Hostname()
@@ -259,22 +255,16 @@ func (c *Cmd) getWrapper(urlData string, port string, data structure.Data, resul
 			chromedp.Evaluate(`window.location.href`, &finalURL),
 		)
 		if err != nil {
-			msg := fmt.Sprintf("The domain has changed from %s: %v", initialURL, err)
-			jsonResponse := utils.GenerateErrorMessage("Target changed", msg)
-
-			// Print the JSON response
-			fmt.Println(string(jsonResponse))
+			data.Error = fmt.Sprintf("The domain has changed from %s: %v", initialURL, err)
+			results <- data
 			return
 		}
 
 		// Analyser l'URL finale pour obtenir le domaine et le port
 		finalParsedURL, err := url.Parse(finalURL)
 		if err != nil {
-			msg := fmt.Sprintf("The domain has changed from %s: %v", finalURL, err)
-			jsonResponse := utils.GenerateErrorMessage("Target changed", msg)
-
-			// Print the JSON response
-			fmt.Println(string(jsonResponse))
+			data.Error = fmt.Sprintf("The domain has changed from %s: %v", finalURL, err)
+			results <- data
 			return
 		}
 		finalDomain := finalParsedURL.Hostname()
@@ -290,16 +280,10 @@ func (c *Cmd) getWrapper(urlData string, port string, data structure.Data, resul
 
 		// Vérifier si le domaine ou le port a changé
 		if initialDomain != finalDomain || initialPort != finalPort {
-			msg := fmt.Sprintf("The domain or port has changed from %s:%s to %s:%s", initialDomain, initialPort, finalDomain, finalPort)
-			jsonResponse := utils.GenerateErrorMessage("Target changed", msg)
-
-			// Print the JSON response
-			fmt.Println(string(jsonResponse))
-			// fmt.Println("Chaîne de redirection :")
-			// for _, u := range redirectChain {
-			// 	fmt.Println("->", u)
-			// }
+			data.Error = fmt.Sprintf("The domain or port has changed from %s:%s to %s:%s", initialDomain, initialPort, finalDomain, finalPort)
+			results <- data
 			return
+
 		}
 
 		// Continuer avec le reste du traitement
@@ -380,11 +364,8 @@ func (c *Cmd) getWrapper(urlData string, port string, data structure.Data, resul
 
 			if initialDomain != finalDomain || initialPort != finalPort {
 
-				msg := fmt.Sprintf("The domain or port has changed from %s:%s to %s:%s", initialDomain, initialPort, finalDomain, finalPort)
-				jsonResponse := utils.GenerateErrorMessage("Target changed", msg)
-
-				// Print the JSON response
-				fmt.Println(string(jsonResponse))
+				data.Error = fmt.Sprintf("The domain or port has changed from %s:%s to %s:%s", initialDomain, initialPort, finalDomain, finalPort)
+				results <- data
 				return
 			}
 
