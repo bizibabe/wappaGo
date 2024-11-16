@@ -30,7 +30,6 @@ import (
 	"github.com/chromedp/cdproto/network"
 	"github.com/chromedp/cdproto/page"
 	"github.com/chromedp/chromedp"
-	"github.com/goccy/go-json"
 	"github.com/projectdiscovery/cdncheck"
 	"github.com/projectdiscovery/fastdialer/fastdialer"
 	pdhttputil "github.com/projectdiscovery/httputil"
@@ -51,38 +50,43 @@ type Cmd struct {
 
 func (c *Cmd) Start(results chan structure.Data) {
 	c.Dialer = c.InitDialer()
-	defer c.Dialer.Close()
+	defer func() {
+		c.Dialer.Close()
+		log.Println("Dialer closed")
+	}()
 
-	optionsChromeCtx := []chromedp.ExecAllocatorOption{}
-	optionsChromeCtx = append(optionsChromeCtx, chromedp.DefaultExecAllocatorOptions[:]...)
-	optionsChromeCtx = append(optionsChromeCtx, chromedp.Flag("headless", true))
-	optionsChromeCtx = append(optionsChromeCtx, chromedp.Flag("disable-popup-blocking", true))
-	optionsChromeCtx = append(optionsChromeCtx, chromedp.DisableGPU)
-	optionsChromeCtx = append(optionsChromeCtx, chromedp.Flag("disable-webgl", true))
-	optionsChromeCtx = append(optionsChromeCtx, chromedp.Flag("ignore-certificate-errors", true)) // RIP shittyproxy.go
-	optionsChromeCtx = append(optionsChromeCtx, chromedp.WindowSize(1400, 900))
+	optionsChromeCtx := []chromedp.ExecAllocatorOption{
+		chromedp.Headless, // Assure que Chrome s'exécute sans UI
+		chromedp.DisableGPU,
+		chromedp.Flag("ignore-certificate-errors", true),
+	}
 	if *c.Options.Proxy != "" {
 		optionsChromeCtx = append(optionsChromeCtx, chromedp.ProxyServer(*c.Options.Proxy))
 	}
 
-	ctxAlloc, cancel1 := chromedp.NewExecAllocator(context.Background(), optionsChromeCtx...)
-	defer cancel1()
+	ctxAlloc, cancelAlloc := chromedp.NewExecAllocator(context.Background(), optionsChromeCtx...)
+	defer cancelAlloc() // Garantit la fermeture de l'allocateur
 
-	ctxAlloc1, cancel := chromedp.NewContext(ctxAlloc)
-	c.ChromeCtx = ctxAlloc1
-	defer cancel()
+	ctx, cancelCtx := chromedp.NewContext(ctxAlloc)
+	c.ChromeCtx = ctx
+	defer func() {
+		// Nettoyage pour garantir que Chrome est fermé
+		cancelCtx()
+		log.Println("Chrome context closed")
+	}()
 
 	if err := chromedp.Run(c.ChromeCtx); err != nil {
-		panic(err)
+		log.Fatalf("Error initializing Chrome: %v", err)
 	}
 
 	c.Cdn = cdncheck.New()
-	var target string
-	var targetIP string
+
+	// Utilisation d'un SizedWaitGroup pour gérer les Goroutines
 	swg := sizedwaitgroup.New(*c.Options.Threads)
 	for _, line := range c.Input {
-		target = line
+		target := line
 		parsedURL, err := url.Parse(line)
+		var targetIP string
 		if err == nil && parsedURL.Scheme != "" && parsedURL.Host != "" {
 			targetIP = c.Dialer.GetDialedIP(parsedURL.Host)
 		} else {
@@ -90,13 +94,18 @@ func (c *Cmd) Start(results chan structure.Data) {
 		}
 
 		swg.Add()
-		go func(url string, ip string) {
+		go func(url, ip string) {
 			defer swg.Done()
+			defer func() {
+				if r := recover(); r != nil {
+					log.Printf("Recovered from panic in Goroutine: %v", r)
+				}
+			}()
 			c.startPortScan(url, ip, results)
 		}(target, targetIP)
 	}
 	swg.Wait()
-	close(results)
+	close(results) // S'assure que le canal est fermé une fois toutes les Goroutines terminées
 }
 
 func (c *Cmd) startPortScan(target string, inputIP string, results chan structure.Data) {
@@ -397,21 +406,30 @@ func (c *Cmd) launchChrome(TempResp structure.Response, data structure.Data, url
 	if data.Infos.Location != "" {
 		urlData = data.Infos.Location
 	}
+
+	// Obtenir des données DNS si disponibles
 	dnsData, err := c.Dialer.GetDNSData(data.Infos.Data)
 	if dnsData != nil && err == nil {
 		data.Infos.Cname = dnsData.CNAME
 	}
 	analyseStruct := analyze.Analyze{}
-	ctxAlloc1, _ := context.WithTimeout(c.ChromeCtx, 60*time.Second)
-	cloneCTX, cancel := chromedp.NewContext(ctxAlloc1)
+
+	// Créer un contexte avec un délai pour éviter les tâches qui traînent
+	ctxAlloc1, cancelCtx := context.WithTimeout(c.ChromeCtx, 60*time.Second)
+	defer cancelCtx() // Assure la fermeture du contexte
+
+	cloneCTX, cancelChromeCtx := chromedp.NewContext(ctxAlloc1)
+	defer cancelChromeCtx() // Nettoyage du contexte Chrome
+
+	// Écoute des événements cibles pour capturer des informations
 	chromedp.ListenTarget(cloneCTX, func(ev interface{}) {
 		if responseEvent, ok := ev.(*network.EventResponseReceived); ok {
-			// Store headers in TempResp.Headers
+			// Stocker les en-têtes dans TempResp.Headers
 			if TempResp.Headers == nil {
 				TempResp.Headers = make(map[string][]string)
 			}
 			for key, value := range responseEvent.Response.Headers {
-				// Ensure the value is converted to []string
+				// Assurez-vous que la valeur est convertie en []string
 				switch v := value.(type) {
 				case string:
 					TempResp.Headers[key] = []string{v}
@@ -420,42 +438,39 @@ func (c *Cmd) launchChrome(TempResp structure.Response, data structure.Data, url
 				}
 			}
 
-			// Process document types
-			switch typeDoc := responseEvent.Type; typeDoc {
+			// Traitement des types de documents
+			switch responseEvent.Type {
 			case "XHR":
 				analyseStruct.XHRUrl = append(analyseStruct.XHRUrl, responseEvent.Response.URL)
 			case "Stylesheet":
-				// Stylesheet processing (currently commented)
+				// Traitement des feuilles de style (actuellement commenté)
 			case "Script":
-				// Script processing (currently commented)
+				// Traitement des scripts (actuellement commenté)
 			}
 		}
-		// Handling JavaScript dialog if it opens
+
+		// Gestion des dialogues JavaScript
 		if _, ok := ev.(*page.EventJavascriptDialogOpening); ok {
 			go func() {
-				if err := chromedp.Run(cloneCTX,
-					page.HandleJavaScriptDialog(true),
-				); err != nil {
-					b, err := json.Marshal(data)
-					if err != nil {
-						fmt.Println("Error:", err)
-					}
-					fmt.Println(string(b))
-					return
+				if err := chromedp.Run(cloneCTX, page.HandleJavaScriptDialog(true)); err != nil {
+					log.Printf("Error handling JavaScript dialog: %v", err)
 				}
 			}()
 		}
 	})
 
-	defer cancel()
-
-	// Run task list
+	// Tâches à exécuter dans Chrome
 	var buf []byte
 	err = chromedp.Run(cloneCTX,
 		chromedp.Navigate(urlData),
 		chromedp.Title(&data.Infos.Title),
 		chromedp.CaptureScreenshot(&buf),
 		chromedp.ActionFunc(func(ctx context.Context) error {
+			defer func() {
+				if r := recover(); r != nil {
+					log.Printf("Recovered from panic in chromedp action: %v", r)
+				}
+			}()
 			cookiesList, _ := network.GetCookies().Do(ctx)
 			if strings.HasPrefix(urlData, "https://") {
 				sslcert, _ := network.GetCertificate(urlData).Do(ctx)
@@ -466,26 +481,27 @@ func (c *Cmd) launchChrome(TempResp structure.Response, data structure.Data, url
 					analyseStruct.CertIssuer = cert.Issuer.CommonName
 				}
 			}
-			node, err_node := dom.GetDocument().Do(ctx)
-			if err_node != nil {
-				return err_node
+			node, err := dom.GetDocument().Do(ctx)
+			if err != nil {
+				return err
 			}
 			body, err := dom.GetOuterHTML().WithNodeID(node.NodeID).Do(ctx)
 			if err == nil {
 				reader := strings.NewReader(body)
 				doc, err := goquery.NewDocumentFromReader(reader)
 				if err != nil {
-					log.Fatal(err)
+					log.Printf("Error parsing HTML document: %v", err)
+				} else {
+					var srcList []string
+					doc.Find("script").Each(func(i int, s *goquery.Selection) {
+						srcLink, exist := s.Attr("src")
+						if exist {
+							srcList = append(srcList, srcLink)
+						}
+					})
+					analyseStruct.SrcList = srcList
+					analyseStruct.Body = body
 				}
-				var srcList []string
-				doc.Find("script").Each(func(i int, s *goquery.Selection) {
-					srcLink, exist := s.Attr("src")
-					if exist {
-						srcList = append(srcList, srcLink)
-					}
-				})
-				analyseStruct.SrcList = srcList
-				analyseStruct.Body = body
 			}
 
 			analyseStruct.ResultGlobal = c.ResultGlobal
@@ -502,18 +518,27 @@ func (c *Cmd) launchChrome(TempResp structure.Response, data structure.Data, url
 		}),
 	)
 
+	// Vérification des erreurs de `chromedp.Run()`
+	if err != nil {
+		log.Printf("Error executing chromedp tasks: %v", err)
+		data.Error = fmt.Sprintf("Error in Chrome execution: %v", err)
+		results <- data
+		return
+	}
+
 	data.Infos.Technologies = technologies.DedupTechno(data.Infos.Technologies)
 	if *c.Options.Screenshot != "" && len(buf) > 0 {
-		imgTitle := strings.Replace(urlData, ":", "_", -1)
-		imgTitle = strings.Replace(imgTitle, "/", "", -1)
-		imgTitle = strings.Replace(imgTitle, ".", "_", -1)
-		file, _ := os.OpenFile(
-			*c.Options.Screenshot+"/"+imgTitle+".png",
-			os.O_WRONLY|os.O_TRUNC|os.O_CREATE,
-			0666,
-		)
-		file.Write(buf)
-		file.Close()
+		imgTitle := strings.ReplaceAll(strings.ReplaceAll(strings.ReplaceAll(urlData, ":", "_"), "/", ""), ".", "_")
+		file, err := os.OpenFile(*c.Options.Screenshot+"/"+imgTitle+".png", os.O_WRONLY|os.O_TRUNC|os.O_CREATE, 0666)
+		if err == nil {
+			_, err = file.Write(buf)
+			if err != nil {
+				log.Printf("Error writing screenshot to file: %v", err)
+			}
+			file.Close()
+		} else {
+			log.Printf("Error opening screenshot file: %v", err)
+		}
 		data.Infos.Screenshot = imgTitle + ".png"
 	}
 	if *c.Options.Report {
@@ -524,16 +549,6 @@ func (c *Cmd) launchChrome(TempResp structure.Response, data structure.Data, url
 	if *c.Options.Report {
 		report.Report_main(c.ResultArray, *c.Options.Screenshot)
 	}
-}
-
-func (c *Cmd) scanPort(protocol, hostname string, port string, portTimeout int) bool {
-	address := hostname + ":" + port
-	conn, err := net.DialTimeout(protocol, address, time.Duration(portTimeout)*time.Millisecond)
-	if err != nil {
-		return false
-	}
-	defer conn.Close()
-	return true
 }
 
 // Do http request
