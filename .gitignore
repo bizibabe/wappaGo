@@ -4,3 +4,5 @@ test.go
 wappaGo.exe
 wappaGo
 technologies_json/*
+*.txt
+test*

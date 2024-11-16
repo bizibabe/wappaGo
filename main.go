@@ -26,11 +26,12 @@ func main() {
 	options.AmassInput = flag.Bool("amass-input", false, "Pip directly on Amass (Amass json output) like amass -d domain.tld | wappaGo")
 	options.FollowRedirect = flag.Bool("follow-redirect", false, "Follow redirect to detect technologie")
 	options.Proxy = flag.String("proxy", "", "Use http proxy")
+	target := flag.String("target", "", "Specify target directly as a command-line argument")
 	flag.Parse()
-	configure(options)
+	configure(options, *target)
 }
 
-func configure(options structure.Options) {
+func configure(options structure.Options, target string) {
 	if *options.Screenshot != "" {
 		if _, err := os.Stat(*options.Screenshot); errors.Is(err, os.ErrNotExist) {
 			err := os.Mkdir(*options.Screenshot, os.ModePerm)
@@ -44,9 +45,15 @@ func configure(options structure.Options) {
 	technologies.EmbedTechnologies(folder)
 
 	var input []string
-	var scanner = bufio.NewScanner(bufio.NewReader(os.Stdin))
-	for scanner.Scan() {
-		input = append(input, scanner.Text())
+	if target != "" {
+		// Use the specified target if provided
+		input = append(input, target)
+	} else {
+		// Fallback to reading from stdin
+		var scanner = bufio.NewScanner(bufio.NewReader(os.Stdin))
+		for scanner.Scan() {
+			input = append(input, scanner.Text())
+		}
 	}
 
 	c := cmd.Cmd{}
