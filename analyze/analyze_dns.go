@@ -9,14 +9,25 @@ import (
 
 // analyze_dns_main performs DNS analysis based on provided keys and values.
 func (a *Analyze) analyze_dns_main(technoName string, key string) {
-	// Check if technoName and key exist in ResultGlobal and perform type assertion.
-	technoData, ok := a.ResultGlobal[technoName].(map[string]interface{})
-	if !ok {
-		fmt.Printf("Invalid technoName structure: %v\n", technoName)
+	technoData, exists := a.ResultGlobal[technoName]
+	if !exists {
+		fmt.Printf("TechnoName %v not found in ResultGlobal\n", technoName)
 		return
 	}
 
-	keyData, ok := technoData[key].(map[string]interface{})
+	technoMap, ok := technoData.(map[string]interface{})
+	if !ok {
+		fmt.Printf("Invalid structure for technoName: %v\n", technoName)
+		return
+	}
+
+	value, exists := technoMap[key]
+	if !exists {
+		fmt.Printf("Key %v not found for technoName %v\n", key, technoName)
+		return
+	}
+
+	keyData, ok := value.(map[string]interface{})
 	if !ok {
 		fmt.Printf("Invalid key structure for key: %v\n", key)
 		return
@@ -24,8 +35,6 @@ func (a *Analyze) analyze_dns_main(technoName string, key string) {
 
 	for key, value := range keyData {
 		var resultDNS []string
-
-		// Determine which DNS data to use based on the key.
 		switch key {
 		case "TXT":
 			resultDNS = a.DnsData.TXT
@@ -42,7 +51,6 @@ func (a *Analyze) analyze_dns_main(technoName string, key string) {
 			continue
 		}
 
-		// Check if the value is a string or a list of regex patterns.
 		switch v := value.(type) {
 		case string:
 			if a.analyze_dns_regex(v, resultDNS) {
