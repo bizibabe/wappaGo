@@ -1,51 +1,82 @@
 package analyze
 
-
-import(
-
+import (
 	"fmt"
-	"github.com/EasyRecon/wappaGo/technologies"
 	"regexp"
+
+	"github.com/EasyRecon/wappaGo/technologies"
 )
-func (a *Analyze) analyze_dns_main(technoName string,key string){
-	for key,value := range a.ResultGlobal[technoName].(map[string]interface{})[key].(map[string]interface{})    {
+
+// analyze_dns_main performs DNS analysis based on provided keys and values.
+func (a *Analyze) analyze_dns_main(technoName string, key string) {
+	// Check if technoName and key exist in ResultGlobal and perform type assertion.
+	technoData, ok := a.ResultGlobal[technoName].(map[string]interface{})
+	if !ok {
+		fmt.Printf("Invalid technoName structure: %v\n", technoName)
+		return
+	}
+
+	keyData, ok := technoData[key].(map[string]interface{})
+	if !ok {
+		fmt.Printf("Invalid key structure for key: %v\n", key)
+		return
+	}
+
+	for key, value := range keyData {
 		var resultDNS []string
+
+		// Determine which DNS data to use based on the key.
 		switch key {
-			case "TXT":
-			    resultDNS = a.DnsData.TXT
-		 	case "SOA":
-			    resultDNS = a.DnsData.SOA
-			case "NS":
-			    resultDNS = a.DnsData.NS
-			case "CNAME":
-			    resultDNS = a.DnsData.CNAME
-			case "MX":
-			    resultDNS = a.DnsData.MX
+		case "TXT":
+			resultDNS = a.DnsData.TXT
+		case "SOA":
+			resultDNS = a.DnsData.SOA
+		case "NS":
+			resultDNS = a.DnsData.NS
+		case "CNAME":
+			resultDNS = a.DnsData.CNAME
+		case "MX":
+			resultDNS = a.DnsData.MX
+		default:
+			fmt.Printf("Unknown DNS type: %v\n", key)
+			continue
 		}
-		if fmt.Sprintf("%T",value) == "string" {
-			found := a.analyze_dns_regex(value.(string),resultDNS)
-			if found {
+
+		// Check if the value is a string or a list of regex patterns.
+		switch v := value.(type) {
+		case string:
+			if a.analyze_dns_regex(v, resultDNS) {
 				technoTemp := a.NewTechno(technoName)
 				a.Technos = append(a.Technos, technoTemp)
 				a.Technos = technologies.CheckRequired(technoTemp.Name, a.ResultGlobal, a.Technos)
 			}
-		} else {
-			for _,regex:= range value.([]interface{})  {
-				found := a.analyze_dns_regex(regex.(string),resultDNS)
-				if found {
-					technoTemp := a.NewTechno(technoName)
-					a.Technos = append(a.Technos, technoTemp)
-					a.Technos = technologies.CheckRequired(technoTemp.Name, a.ResultGlobal, a.Technos)
+		case []interface{}:
+			for _, regex := range v {
+				if regexStr, ok := regex.(string); ok {
+					if a.analyze_dns_regex(regexStr, resultDNS) {
+						technoTemp := a.NewTechno(technoName)
+						a.Technos = append(a.Technos, technoTemp)
+						a.Technos = technologies.CheckRequired(technoTemp.Name, a.ResultGlobal, a.Technos)
+					}
+				} else {
+					fmt.Printf("Invalid regex type: %v\n", regex)
 				}
 			}
+		default:
+			fmt.Printf("Unexpected value type: %T\n", value)
 		}
-	}	
+	}
 }
 
-func (a *Analyze) analyze_dns_regex(regex string,resultsDNS []string)(bool){
-
-	for _,resultDNS:= range resultsDNS {
-		findregex, _ := regexp.MatchString("(?i)"+regex, resultDNS)
+// analyze_dns_regex performs regex matching on DNS results.
+func (a *Analyze) analyze_dns_regex(regex string, resultsDNS []string) bool {
+	for _, resultDNS := range resultsDNS {
+		// Match the regex pattern against the DNS result.
+		findregex, err := regexp.MatchString("(?i)"+regex, resultDNS)
+		if err != nil {
+			fmt.Printf("Regex error: %v\n", err)
+			continue
+		}
 		if findregex {
 			return true
 		}
