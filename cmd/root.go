@@ -52,11 +52,10 @@ func (c *Cmd) Start(results chan structure.Data) {
 	c.Dialer = c.InitDialer()
 	defer func() {
 		c.Dialer.Close()
-		//log.Println("Dialer closed")
 	}()
 
 	optionsChromeCtx := []chromedp.ExecAllocatorOption{
-		chromedp.Headless, // Assure que Chrome s'exécute sans UI
+		chromedp.Headless,
 		chromedp.DisableGPU,
 		chromedp.Flag("ignore-certificate-errors", true),
 	}
@@ -64,15 +63,21 @@ func (c *Cmd) Start(results chan structure.Data) {
 		optionsChromeCtx = append(optionsChromeCtx, chromedp.ProxyServer(*c.Options.Proxy))
 	}
 
+	tempDir, err := os.MkdirTemp("", "chromedp-profile-*")
+	if err != nil {
+		log.Fatalf("Failed to create temp dir: %v", err)
+	}
+	defer os.RemoveAll(tempDir) // Nettoyage du répertoire temporaire à la fin
+
+	optionsChromeCtx = append(optionsChromeCtx, chromedp.UserDataDir(tempDir))
+
 	ctxAlloc, cancelAlloc := chromedp.NewExecAllocator(context.Background(), optionsChromeCtx...)
-	defer cancelAlloc() // Garantit la fermeture de l'allocateur
+	defer cancelAlloc()
 
 	ctx, cancelCtx := chromedp.NewContext(ctxAlloc)
 	c.ChromeCtx = ctx
 	defer func() {
-		// Nettoyage pour garantir que Chrome est fermé
 		cancelCtx()
-		//log.Println("Chrome context closed")
 	}()
 
 	if err := chromedp.Run(c.ChromeCtx); err != nil {
@@ -81,7 +86,6 @@ func (c *Cmd) Start(results chan structure.Data) {
 
 	c.Cdn = cdncheck.New()
 
-	// Utilisation d'un SizedWaitGroup pour gérer les Goroutines
 	swg := sizedwaitgroup.New(*c.Options.Threads)
 	for _, line := range c.Input {
 		target := line
@@ -105,7 +109,7 @@ func (c *Cmd) Start(results chan structure.Data) {
 		}(target, targetIP)
 	}
 	swg.Wait()
-	close(results) // S'assure que le canal est fermé une fois toutes les Goroutines terminées
+	close(results)
 }
 
 func (c *Cmd) startPortScan(target string, inputIP string, results chan structure.Data) {
