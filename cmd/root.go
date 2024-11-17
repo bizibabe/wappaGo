@@ -52,7 +52,7 @@ func (c *Cmd) Start(results chan structure.Data) {
 	c.Dialer = c.InitDialer()
 	defer func() {
 		c.Dialer.Close()
-		log.Println("Dialer closed")
+		//log.Println("Dialer closed")
 	}()
 
 	optionsChromeCtx := []chromedp.ExecAllocatorOption{
@@ -72,7 +72,7 @@ func (c *Cmd) Start(results chan structure.Data) {
 	defer func() {
 		// Nettoyage pour garantir que Chrome est fermé
 		cancelCtx()
-		log.Println("Chrome context closed")
+		//log.Println("Chrome context closed")
 	}()
 
 	if err := chromedp.Run(c.ChromeCtx); err != nil {
@@ -316,6 +316,7 @@ func (c *Cmd) getWrapper(inputURL string, port string, data structure.Data, resu
 
 		err = chromedp.Run(ctx,
 			network.Enable(),
+			network.SetCacheDisabled(true),
 			chromedp.Navigate(initialURL),
 			chromedp.WaitReady("body"),
 			chromedp.Evaluate(`window.location.href`, &finalURL),
@@ -462,6 +463,8 @@ func (c *Cmd) launchChrome(TempResp structure.Response, data structure.Data, url
 	// Tâches à exécuter dans Chrome
 	var buf []byte
 	err = chromedp.Run(cloneCTX,
+		network.Enable(),
+		network.SetCacheDisabled(true),
 		chromedp.Navigate(urlData),
 		chromedp.Title(&data.Infos.Title),
 		chromedp.CaptureScreenshot(&buf),
