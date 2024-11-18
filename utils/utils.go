@@ -3,6 +3,8 @@ package utils
 import (
 	"encoding/json"
 	"log"
+
+	"github.com/EasyRecon/wappaGo/structure"
 )
 
 func GenerateErrorMessage(errorType string, msg string) string {
@@ -19,4 +21,15 @@ func GenerateErrorMessage(errorType string, msg string) string {
 	}
 
 	return string(jsonResponse)
+}
+
+func SendError(results chan structure.Data, url, errorMsg string) {
+	data := structure.Data{
+		Url: url,
+		Infos: structure.Host{
+			Data: url,
+		},
+		Error: errorMsg,
+	}
+	results <- data
 }

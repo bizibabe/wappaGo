@@ -25,6 +25,7 @@ import (
 	"github.com/EasyRecon/wappaGo/report"
 	"github.com/EasyRecon/wappaGo/structure"
 	"github.com/EasyRecon/wappaGo/technologies"
+	"github.com/EasyRecon/wappaGo/utils"
 	"github.com/PuerkitoBio/goquery"
 	"github.com/chromedp/cdproto/dom"
 	"github.com/chromedp/cdproto/network"
@@ -65,7 +66,8 @@ func (c *Cmd) Start(results chan structure.Data) {
 
 	tempDir, err := os.MkdirTemp("", "chromedp-profile-*")
 	if err != nil {
-		log.Fatalf("Failed to create temp dir: %v", err)
+		utils.SendError(results, "", fmt.Sprintf("Failed to create temp dir: %v", err))
+		return
 	}
 	defer os.RemoveAll(tempDir) // Nettoyage du répertoire temporaire à la fin
 
@@ -81,7 +83,8 @@ func (c *Cmd) Start(results chan structure.Data) {
 	}()
 
 	if err := chromedp.Run(c.ChromeCtx); err != nil {
-		log.Fatalf("Error initializing Chrome: %v", err)
+		utils.SendError(results, "", fmt.Sprintf("Error initializing Chrome: %v", err))
+		return
 	}
 
 	c.Cdn = cdncheck.New()
@@ -102,7 +105,8 @@ func (c *Cmd) Start(results chan structure.Data) {
 			defer swg.Done()
 			defer func() {
 				if r := recover(); r != nil {
-					log.Printf("Recovered from panic in Goroutine: %v", r)
+					utils.SendError(results, "", fmt.Sprintf("Recovered from panic in Goroutine: %v", r))
+					return
 				}
 			}()
 			c.startPortScan(url, ip, results)
@@ -157,7 +161,7 @@ func (c *Cmd) startPortScan(target string, inputIP string, results chan structur
 	}
 	parsedURL, err := url.Parse(inputURL)
 	if err != nil {
-		log.Printf("Invalid URL: %s", target)
+		utils.SendError(results, "", fmt.Sprintf("Invalid URL: %s", target))
 		return
 	}
 	hostname := parsedURL.Hostname()
@@ -221,7 +225,8 @@ func (c *Cmd) startPortScan(target string, inputIP string, results chan structur
 			}
 			if !openPort {
 				// Si le port est fermé, définissez une erreur, mais continuez le traitement
-				data.Error = fmt.Sprintf("Port %s on %s is closed", portEnum, hostname)
+				utils.SendError(results, target, fmt.Sprintf("Port %s on %s is closed", portEnum, hostname))
+				return
 			}
 
 			// Toujours appeler getWrapper, que le port soit ouvert ou fermé
@@ -255,8 +260,7 @@ func (c *Cmd) getWrapper(inputURL string, port string, data structure.Data, resu
 	parsedURL, err := url.Parse(inputURL)
 
 	if err != nil {
-		data.Error = fmt.Sprintf("Error parsing input URL %s: %v", inputURL, err)
-		results <- data
+		utils.SendError(results, inputURL, fmt.Sprintf("Error parsing input URL %s: %v", inputURL, err))
 		return
 	}
 
@@ -270,18 +274,11 @@ func (c *Cmd) getWrapper(inputURL string, port string, data structure.Data, resu
 		urlDataPort = inputURL
 	}
 
-	if data.Error != "" {
-		data.Url = urlDataPort
-		results <- data
-		return
-	}
-
 	// Construct initial URL for request
 	initialURL := urlDataPort
 	initialParsedURL, err := url.Parse(initialURL)
 	if err != nil {
-		data.Error = fmt.Sprintf("Error parsing initial URL %s: %v", initialURL, err)
-		results <- data
+		utils.SendError(results, inputURL, fmt.Sprintf("Error parsing initial URL %s: %v", initialURL, err))
 		return
 	}
 
@@ -326,15 +323,13 @@ func (c *Cmd) getWrapper(inputURL string, port string, data structure.Data, resu
 			chromedp.Evaluate(`window.location.href`, &finalURL),
 		)
 		if err != nil {
-			data.Error = fmt.Sprintf("Webdriver error : %v", err)
-			results <- data
+			utils.SendError(results, inputURL, fmt.Sprintf("Webdriver error : %v", err))
 			return
 		}
 
 		finalParsedURL, err := url.Parse(finalURL)
 		if err != nil {
-			data.Error = fmt.Sprintf("Error parsing final URL %s : %v", finalURL, err)
-			results <- data
+			utils.SendError(results, inputURL, fmt.Sprintf("Error parsing final URL %s : %v", finalURL, err))
 			return
 		}
 		finalDomain := finalParsedURL.Hostname()
@@ -348,9 +343,7 @@ func (c *Cmd) getWrapper(inputURL string, port string, data structure.Data, resu
 		}
 
 		if initialDomain != finalDomain || initialPort != finalPort {
-			data.Url = initialURL
-			data.Error = fmt.Sprintf("Target changed from %s:%s to %s:%s", initialDomain, initialPort, finalDomain, finalPort)
-			results <- data
+			utils.SendError(results, inputURL, fmt.Sprintf("Target changed from %s:%s to %s:%s", initialDomain, initialPort, finalDomain, finalPort))
 			return
 		}
 
@@ -475,7 +468,8 @@ func (c *Cmd) launchChrome(TempResp structure.Response, data structure.Data, url
 		chromedp.ActionFunc(func(ctx context.Context) error {
 			defer func() {
 				if r := recover(); r != nil {
-					log.Printf("Recovered from panic in chromedp action: %v", r)
+					utils.SendError(results, urlData, fmt.Sprintf("Recovered from panic in chromedp action: %v", r))
+					return
 				}
 			}()
 			cookiesList, _ := network.GetCookies().Do(ctx)
@@ -527,9 +521,7 @@ func (c *Cmd) launchChrome(TempResp structure.Response, data structure.Data, url
 
 	// Vérification des erreurs de `chromedp.Run()`
 	if err != nil {
-		log.Printf("Error executing chromedp tasks: %v", err)
-		data.Error = fmt.Sprintf("Error in Chrome execution: %v", err)
-		results <- data
+		utils.SendError(results, urlData, fmt.Sprintf("Error in Chrome execution: %v", err))
 		return
 	}
 
