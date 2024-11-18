@@ -78,9 +78,7 @@ func (c *Cmd) Start(results chan structure.Data) {
 
 	ctx, cancelCtx := chromedp.NewContext(ctxAlloc)
 	c.ChromeCtx = ctx
-	defer func() {
-		cancelCtx()
-	}()
+	defer cancelCtx()
 
 	if err := chromedp.Run(c.ChromeCtx); err != nil {
 		utils.SendError(results, "", fmt.Sprintf("Error initializing Chrome: %v", err))
