@@ -178,7 +178,8 @@ func (c *Cmd) startPortScan(target string, inputIP string, results chan structur
 
 	isCDN, cdnName, _, err := c.Cdn.Check(net.ParseIP(inputIP))
 	if err != nil {
-		log.Fatal(err)
+		utils.SendError(results, target, fmt.Sprintf("Errror CDN : %s", err))
+		return
 	}
 	if isCDN {
 		CdnName = cdnName
