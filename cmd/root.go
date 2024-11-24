@@ -21,7 +21,6 @@ import (
 	"unicode/utf8"
 
 	"github.com/EasyRecon/wappaGo/analyze"
-	"github.com/EasyRecon/wappaGo/lib"
 	"github.com/EasyRecon/wappaGo/report"
 	"github.com/EasyRecon/wappaGo/structure"
 	"github.com/EasyRecon/wappaGo/technologies"
@@ -115,125 +114,98 @@ func (c *Cmd) Start(results chan structure.Data) {
 }
 
 func (c *Cmd) startPortScan(target string, inputIP string, results chan structure.Data) {
-	var inputURL string
-	var isDomain bool
-	portList := strings.Split(*c.Options.Ports, ",")
-	swg1 := sizedwaitgroup.New(50)
-	swg := sizedwaitgroup.New(*c.Options.ChromeThreads)
-	var CdnName string
-	portTemp := portList // Default to user-specified ports
+    var inputURL string
+    var isDomain bool
+    portList := strings.Split(*c.Options.Ports, ",")
+    swg := sizedwaitgroup.New(*c.Options.ChromeThreads) // Gestion des goroutines pour les threads Chrome
+    var CdnName string
 
-	http.DefaultTransport.(*http.Transport).TLSClientConfig = &tls.Config{InsecureSkipVerify: true}
+    // Configuration du transport HTTP
+    transport := &http.Transport{
+        TLSClientConfig: &tls.Config{
+            InsecureSkipVerify: true,
+        },
+        DialContext:       c.Dialer.Dial,
+        DisableKeepAlives: true,
+    }
+    if *c.Options.Proxy != "" {
+        proxyURL, parseErr := url.Parse(*c.Options.Proxy)
+        if parseErr == nil {
+            transport.Proxy = http.ProxyURL(proxyURL)
+            transport.TLSClientConfig.MinVersion = tls.VersionTLS12
+            transport.TLSClientConfig.MaxVersion = tls.VersionTLS12
+        }
+    }
+    c.HttpClient = &http.Client{
+        Timeout:   10 * time.Second,
+        Transport: transport,
+    }
 
-	transport := &http.Transport{
-		TLSClientConfig: &tls.Config{
-			InsecureSkipVerify: true,
-		},
-		DialContext:       c.Dialer.Dial,
-		DisableKeepAlives: true,
-	}
-	if *c.Options.Proxy != "" {
-		proxyURL, parseErr := url.Parse(*c.Options.Proxy)
-		if parseErr == nil {
-			transport.Proxy = http.ProxyURL(proxyURL)
-			transport.TLSClientConfig.MinVersion = tls.VersionTLS12
-			transport.TLSClientConfig.MaxVersion = tls.VersionTLS12
-		}
-	}
-	c.HttpClient = &http.Client{
-		Timeout:   10 * time.Second,
-		Transport: transport,
-	}
-	if !*c.Options.FollowRedirect {
-		c.HttpClient.CheckRedirect = func(req *http.Request, via []*http.Request) error {
-			return http.ErrUseLastResponse
-		}
-	}
+    if !strings.HasPrefix(target, "http") {
+        inputURL = "http://" + target
+        isDomain = true
+    } else {
+        inputURL = target
+        isDomain = false
+    }
+    parsedURL, err := url.Parse(inputURL)
+    if err != nil {
+        utils.SendError(results, "", fmt.Sprintf("Invalid URL: %s", target))
+        return
+    }
+    hostname := parsedURL.Hostname()
 
-	if !strings.HasPrefix(target, "http") {
-		inputURL = "http://" + target
-		isDomain = true
-	} else {
-		inputURL = target
-		isDomain = false
-	}
-	parsedURL, err := url.Parse(inputURL)
-	if err != nil {
-		utils.SendError(results, "", fmt.Sprintf("Invalid URL: %s", target))
-		return
-	}
-	hostname := parsedURL.Hostname()
+    // Déterminer les ports en fonction du schéma
+    var portTemp []string
+    if !isDomain && parsedURL.Scheme != "" && parsedURL.Host != "" {
+        if parsedURL.Scheme == "https" && parsedURL.Port() == "" {
+            portTemp = []string{"443"}
+        } else if parsedURL.Scheme == "http" && parsedURL.Port() == "" {
+            portTemp = []string{"80"}
+        } else {
+            portTemp = []string{parsedURL.Port()}
+        }
+    } else {
+        portTemp = portList
+    }
 
-	// Restrict portTemp based on URL scheme only if it's a full URL (not just a domain)
-	if !isDomain && parsedURL.Scheme != "" && parsedURL.Host != "" {
-		if parsedURL.Scheme == "https" && parsedURL.Port() == "" {
-			portTemp = []string{"443"}
-		} else if parsedURL.Scheme == "http" && parsedURL.Port() == "" {
-			portTemp = []string{"80"}
-		} else {
-			portTemp = []string{parsedURL.Port()}
-		}
-	}
-	//log.Printf("Port list for scanning: %v", portTemp) // Debug log to verify portTemp
+    // Vérification CDN
+    isCDN, cdnName, _, err := c.Cdn.Check(net.ParseIP(inputIP))
+    if err != nil {
+        utils.SendError(results, target, fmt.Sprintf("Error checking CDN: %s", err))
+        return
+    }
+    if isCDN {
+        CdnName = cdnName
+    }
 
-	isCDN, cdnName, _, err := c.Cdn.Check(net.ParseIP(inputIP))
-	if err != nil {
-		utils.SendError(results, target, fmt.Sprintf("Errror CDN : %s", err))
-		return
-	}
-	if isCDN {
-		CdnName = cdnName
-	}
+    // Analyse des ports
+    for _, port := range portTemp {
+        swg.Add()
+        go func(port string) {
+            defer swg.Done()
+            openPort := c.reliablePortScan("tcp", hostname, port, *c.Options.Porttimeout)
+            data := structure.Data{
+                Infos: structure.Host{
+                    Port: port,
+                    Data: target,
+                    IP:   inputIP,
+                    CDN:  CdnName,
+                },
+            }
 
-	var portOpen []string
+            if !openPort {
+                utils.SendError(results, target, fmt.Sprintf("Port %s on %s is closed", port, hostname))
+                return
+            }
 
-	alreadyScanned := lib.CheckIpAlreadyScan(inputIP, c.PortOpenByIP)
-	if alreadyScanned.IP != "" {
-		portOpen = alreadyScanned.Open_port
-	} else {
-		for _, portEnum := range portTemp {
-			swg1.Add()
-			go func(portEnum string, hostname string) {
-				defer swg1.Done()
-				openPort := c.reliablePortScan("tcp", hostname, portEnum, *c.Options.Porttimeout)
-				if openPort {
-					portOpen = append(portOpen, portEnum)
-				}
-			}(portEnum, hostname)
-		}
-		swg1.Wait()
-		var tempScanned structure.PortOpenByIp
-		tempScanned.IP = inputIP
-		tempScanned.Open_port = portOpen
-		c.PortOpenByIP = append(c.PortOpenByIP, tempScanned)
-	}
-
-	// Loop over ports and scan
-	for _, portEnum := range portTemp {
-		swg.Add()
-		go func(portEnum string, hostname string) {
-			defer swg.Done()
-			openPort := c.reliablePortScan("tcp", hostname, portEnum, *c.Options.Porttimeout)
-			data := structure.Data{
-				Infos: structure.Host{
-					Port: portEnum,
-					Data: target,
-					IP:   inputIP,
-					CDN:  CdnName,
-				},
-			}
-			if !openPort {
-				// Si le port est fermé, définissez une erreur, mais continuez le traitement
-				utils.SendError(results, target, fmt.Sprintf("Port %s on %s is closed", portEnum, hostname))
-				return
-			}
-
-			// Toujours appeler getWrapper, que le port soit ouvert ou fermé
-			c.getWrapper(inputURL, portEnum, data, results)
-		}(portEnum, hostname)
-	}
-	swg.Wait()
+            // Traiter le port ouvert
+            c.getWrapper(inputURL, port, data, results)
+        }(port)
+    }
+    swg.Wait()
 }
+
 
 func (c *Cmd) reliablePortScan(protocol, hostname, port string, portTimeout int) bool {
 	address := hostname + ":" + port
@@ -294,8 +266,11 @@ func (c *Cmd) getWrapper(inputURL string, port string, data structure.Data, resu
 
 	// Follow redirects if option is enabled
 	if *c.Options.FollowRedirect {
-		ctx, cancel := chromedp.NewContext(c.ChromeCtx)
+		timeoutCtx, cancel := context.WithTimeout(c.ChromeCtx, 60*time.Second)
 		defer cancel()
+
+		ctx, cancelCtx := chromedp.NewContext(timeoutCtx)
+		defer cancelCtx()
 
 		var finalURL string
 		var statusCode int64
