@@ -9,9 +9,9 @@ import (
 	"log"
 	"os"
 
-	"github.com/EasyRecon/wappaGo/cmd"
-	"github.com/EasyRecon/wappaGo/structure"
-	"github.com/EasyRecon/wappaGo/technologies"
+	"github.com/bizibabe/wappaGo/cmd"
+	"github.com/bizibabe/wappaGo/structure"
+	"github.com/bizibabe/wappaGo/technologies"
 )
 
 func main() {
