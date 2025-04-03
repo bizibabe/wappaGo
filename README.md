@@ -34,6 +34,10 @@ or
 go install github.com/bizibabe/wappaGo
 ```
 
+```
+wappaGo -target https://test.fr -follow-redirect
+```
+
 **Note :** _wappaGo requires Chrome to be present on the system_
 
 # Usage
