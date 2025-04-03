@@ -31,7 +31,7 @@ cd wappaGo && go build
 ```
 or
 ```
-go install github.com/EasyRecon/wappaGo@latest
+go install github.com/bizibabe/wappaGo
 ```
 
 **Note :** _wappaGo requires Chrome to be present on the system_
