@@ -1,4 +1,4 @@
-module github.com/EasyRecon/wappaGo
+module github.com/bizibabe/wappaGo
 
 go 1.23
 
