@@ -26,7 +26,7 @@ To allow an efficient detection of technologies, it is necessary to open a brows
 Download the latest [release](https://github.com/EasyRecon/wappaGo/releases)  or compile by yourself :
 
 ```bash
-git clone https://github.com/EasyRecon/wappaGo
+git clone https://github.com/bizibabe/wappaGo
 cd wappaGo && go build 
 ```
 or
