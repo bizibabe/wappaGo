@@ -5,7 +5,7 @@ import (
 	"math/rand"
 	"path/filepath"
 
-	"github.com/EasyRecon/wappaGo/structure"
+	"github.com/bizibabe/wappaGo/structure"
 )
 
 func RandStringBytes(n int) string {
