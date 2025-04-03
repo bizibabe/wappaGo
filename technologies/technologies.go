@@ -10,10 +10,10 @@ import (
 	"os"
 	"path/filepath"
 
-	"github.com/EasyRecon/wappaGo/lib"
-	"github.com/EasyRecon/wappaGo/structure"
-	"github.com/EasyRecon/wappaGo/utils"
-	"github.com/imdario/mergo"
+	"github.com/bizibabe/wappaGo/lib"
+	"github.com/bizibabe/wappaGo/structure"
+	"github.com/bizibabe/wappaGo/utils"
+	"github.com/bizibabe/mergo"
 )
 
 func CheckRequired(technoName string, technoList map[string]interface{}, tech []structure.Technologie) []structure.Technologie {
