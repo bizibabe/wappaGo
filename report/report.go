@@ -2,7 +2,7 @@ package report
 
 
 import(
-	"github.com/EasyRecon/wappaGo/structure"
+	"github.com/bizibabe/wappaGo/structure"
 "os"
 "strconv"
 )

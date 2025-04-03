@@ -1,7 +1,7 @@
 package analyze
 
 import (
-	"github.com/EasyRecon/wappaGo/technologies"
+	"github.com/bizibabe/wappaGo/technologies"
 )
 
 func (a *Analyze)analyze_cert_main(technoName string,key string){

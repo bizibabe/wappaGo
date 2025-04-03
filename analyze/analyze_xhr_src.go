@@ -3,7 +3,7 @@ package analyze
 import(
 	"fmt"
 	"regexp"
-	"github.com/EasyRecon/wappaGo/technologies"
+	"github.com/bizibabe/wappaGo/technologies"
 )
 
 

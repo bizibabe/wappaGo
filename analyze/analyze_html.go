@@ -6,7 +6,7 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/EasyRecon/wappaGo/technologies"
+	"github.com/bizibabe/wappaGo/technologies"
 )
 
 func (a *Analyze) analyze_html_main(technoName string, key string) {

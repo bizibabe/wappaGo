@@ -4,8 +4,8 @@ import (
 	"context"
 	"strings"
 
-	"github.com/EasyRecon/wappaGo/lib"
-	structure "github.com/EasyRecon/wappaGo/structure"
+	"github.com/bizibabe/wappaGo/lib"
+	structure "github.com/bizibabe/wappaGo/structure"
 	"github.com/PuerkitoBio/goquery"
 	cdp "github.com/chromedp/cdproto/cdp"
 	"github.com/chromedp/cdproto/network"

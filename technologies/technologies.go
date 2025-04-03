@@ -13,7 +13,7 @@ import (
 	"github.com/bizibabe/wappaGo/lib"
 	"github.com/bizibabe/wappaGo/structure"
 	"github.com/bizibabe/wappaGo/utils"
-	"github.com/bizibabe/mergo"
+	"github.com/imdario/mergo"
 )
 
 func CheckRequired(technoName string, technoList map[string]interface{}, tech []structure.Technologie) []structure.Technologie {

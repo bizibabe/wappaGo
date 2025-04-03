@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"regexp"
 
-	"github.com/EasyRecon/wappaGo/technologies"
+	"github.com/bizibabe/wappaGo/technologies"
 )
 
 // analyze_dns_main performs DNS analysis based on provided keys and values.

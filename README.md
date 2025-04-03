@@ -2,13 +2,13 @@
 
 <p align="center">  
     <a href="https://opensource.org/licenses/MIT"><img src="https://img.shields.io/badge/license-MIT-_red.svg"></a>  
-    <a href="https://github.com/EasyRecon/Hunt3r/issues"><img src="https://img.shields.io/badge/contributions-welcome-brightgreen.svg?style=flat"></a>  
-    <a href="https://github.com/EasyRecon/Hunt3r"><img src="https://img.shields.io/badge/release-v0.0.8-informational"></a>
-    <a href="https://github.com/easyrecon/wappago/issues" target="_blank"><img src="https://img.shields.io/github/issues/easyrecon/wappago?color=blue" /></a>
+    <a href="https://github.com/bizibabe/Hunt3r/issues"><img src="https://img.shields.io/badge/contributions-welcome-brightgreen.svg?style=flat"></a>  
+    <a href="https://github.com/bizibabe/Hunt3r"><img src="https://img.shields.io/badge/release-v0.0.8-informational"></a>
+    <a href="https://github.com/bizibabe/wappago/issues" target="_blank"><img src="https://img.shields.io/github/issues/bizibabe/wappago?color=blue" /></a>
 </p>
 
 <p align="center">  
-    <a href="https://codeclimate.com/github/EasyRecon/wappaGo"><img src="https://codeclimate.com/github/EasyRecon/wappaGo.png"></a>
+    <a href="https://codeclimate.com/github/bizibabe/wappaGo"><img src="https://codeclimate.com/github/bizibabe/wappaGo.png"></a>
 </p>
 
 <p align="center">
@@ -23,7 +23,7 @@ To allow an efficient detection of technologies, it is necessary to open a brows
 
 # Installation
 
-Download the latest [release](https://github.com/EasyRecon/wappaGo/releases)  or compile by yourself :
+Download the latest [release](https://github.com/bizibabe/wappaGo/releases)  or compile by yourself :
 
 ```bash
 git clone https://github.com/bizibabe/wappaGo
@@ -109,8 +109,8 @@ package main
 import (
 	"fmt"
 
-	"github.com/EasyRecon/wappaGo/structure"
-	"github.com/EasyRecon/wappaGo/wrapper"
+	"github.com/bizibabe/wappaGo/structure"
+	"github.com/bizibabe/wappaGo/wrapper"
 )
 
 func main() {

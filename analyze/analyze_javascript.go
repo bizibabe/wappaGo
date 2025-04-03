@@ -5,7 +5,7 @@ import (
 	"regexp"
 	"strings"
 
-	"github.com/EasyRecon/wappaGo/technologies"
+	"github.com/bizibabe/wappaGo/technologies"
 	"github.com/chromedp/chromedp"
 )
 
