@@ -4,7 +4,7 @@ import (
 	"encoding/json"
 	"log"
 
-	"github.com/EasyRecon/wappaGo/structure"
+	"github.com/bizibabe/wappaGo/structure"
 )
 
 func GenerateErrorMessage(errorType string, msg string) string {
